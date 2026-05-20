@@ -8,7 +8,7 @@ All notable changes to GBrain will be documented in this file.
 
 When the v0.36.1.0 calibration wave grades a take, the judge can return one of four outcomes: correct, incorrect, partial, unresolvable. Unresolvable means "we tried but the evidence wasn't there to decide." The database constraint that v0.36.1.0 added only accepted the first three. Anything writing an unresolvable verdict hit a CHECK constraint violation and silently dropped the row. This hotfix widens the constraint and surfaces unresolvable as a first-class quality + a measurable scorecard signal, so a brain with 50% unresolvable verdicts can read that as "your retrieval is weak in this domain" instead of "no data."
 
-Hotfix-narrow. No prompt changes, no LLM dependencies, no eval gates. Rebased on top of v0.37.0.0 during a master-merge collision — the work was originally cut against v0.36.1.0 as v0.36.1.1, but master shipped v0.36.1.1 + v0.36.2.0 + v0.36.3.0 + autonomous-remediation through v0.37.0.0 in parallel. Migration renumbered v74 → v79; everything else (engine widening, scorecard sibling fields, R1-R5 tests) is unchanged. The full feature wave (falsifiability scoring, propose-side dedup, per-category calibration) follows separately as a follow-up minor.
+Hotfix-narrow. No prompt changes, no LLM dependencies, no eval gates. Rebased on top of v0.37.1.0 during a second master-merge collision — the work was originally cut against v0.36.1.0 as v0.36.1.1, but master shipped v0.36.1.1 + v0.36.2.0 + v0.36.3.0 + autonomous-remediation through v0.37.0.0 in parallel, then v0.37.1.0 (brainstorm/lsd) claimed v79. Migration renumbered v74 → v79 → v80; everything else (engine widening, scorecard sibling fields, R1-R5 tests) is unchanged. The full feature wave (falsifiability scoring, propose-side dedup, per-category calibration) follows separately as a follow-up minor.
 
 ### What you can now do
 
@@ -28,19 +28,19 @@ Hotfix-narrow. No prompt changes, no LLM dependencies, no eval gates. Rebased on
 
 Two CHECK constraints lived on the `takes` table after v0.36.1.0:
 
-1. A table-level `takes_resolution_consistency` constraint enforcing valid `(resolved_quality, resolved_outcome)` pairs. Migration v79 widens it to admit `('unresolvable', NULL)` alongside the existing `('correct', true)` / `('incorrect', false)` / `('partial', NULL)` / `(NULL, NULL)` pairs.
-2. A column-level CHECK on `resolved_quality` enumerating valid string values. Migration v79 drops it (both the auto-generated Postgres name `takes_resolved_quality_check` and the new explicit name `takes_resolved_quality_values`) and re-adds it with the 4-state list.
+1. A table-level `takes_resolution_consistency` constraint enforcing valid `(resolved_quality, resolved_outcome)` pairs. Migration v80 widens it to admit `('unresolvable', NULL)` alongside the existing `('correct', true)` / `('incorrect', false)` / `('partial', NULL)` / `(NULL, NULL)` pairs.
+2. A column-level CHECK on `resolved_quality` enumerating valid string values. Migration v80 drops it (both the auto-generated Postgres name `takes_resolved_quality_check` and the new explicit name `takes_resolved_quality_values`) and re-adds it with the 4-state list.
 
 Existing rows are unaffected. The `(NULL, NULL)`, `('correct', true)`, `('incorrect', false)`, and `('partial', NULL)` shapes still satisfy both new CHECKs. ALTER TABLE briefly acquires `AccessExclusiveLock` to validate existing rows — on a 36K-row takes table this is sub-second. Larger brains (>1M rows) may see a few seconds of write blocking during migration.
 
 ### To take advantage of v0.37.2.0
 
-`gbrain upgrade` runs migration v79 automatically. If your grading script was failing today:
+`gbrain upgrade` runs migration v80 automatically. If your grading script was failing today:
 
 1. **Run the migration:**
    ```bash
    gbrain upgrade
-   gbrain doctor  # verify schema_version >= 79
+   gbrain doctor  # verify schema_version >= 80
    ```
 2. **Re-run your grading script.** Unresolvable verdicts now persist; the constraint accepts them.
 3. **Read the new metric:**
@@ -58,19 +58,19 @@ If anything still fails, file an issue at https://github.com/garrytan/gbrain/iss
 ### Itemized changes
 
 #### Schema
-- **`src/core/migrate.ts`** — new migration v79 `takes_unresolvable_quality_v0_37_2_0`. Idempotent. Drops + re-adds both the column-level CHECK (now named `takes_resolved_quality_values`) and the table-level `takes_resolution_consistency` CHECK with `'unresolvable'` admitted. Renumbered from v74 → v79 during the master-merge collision when v0.37.0.0 landed master's autonomous-remediation wave through v78.
+- **`src/core/migrate.ts`** — new migration v80 `takes_unresolvable_quality_v0_37_2_0`. Idempotent. Drops + re-adds both the column-level CHECK (now named `takes_resolved_quality_values`) and the table-level `takes_resolution_consistency` CHECK with `'unresolvable'` admitted. Renumbered from v74 → v79 → v80 during successive master-merge collisions (v0.37.0.0 autonomous-remediation through v78, then v0.37.1.0 brainstorm/lsd claimed v79).
 
 #### Engine surface
 - **`src/core/engine.ts`** — `Take.resolved_quality` widens to `'correct' | 'incorrect' | 'partial' | 'unresolvable' | null`. `TakeResolution.quality` widens to the same 4-state union. `TakesScorecard` gains two new sibling fields: `unresolvable_count: number` and `unresolvable_rate: number | null`. Existing fields (`resolved`, `correct`, `incorrect`, `partial`, `accuracy`, `brier`, `partial_rate`) unchanged.
-- **`src/core/takes-resolution.ts`** — `deriveResolutionTuple` now accepts `quality: 'unresolvable'` (maps to `outcome: null`, same shape as partial). `ScorecardRowRaw.unresolvable_count` is optional so pre-v79 engine responses keep working. `finalizeScorecard` computes `unresolvable_rate = unresolvable_count / (resolved + unresolvable_count)`, NULL when both are zero.
+- **`src/core/takes-resolution.ts`** — `deriveResolutionTuple` now accepts `quality: 'unresolvable'` (maps to `outcome: null`, same shape as partial). `ScorecardRowRaw.unresolvable_count` is optional so pre-v80 engine responses keep working. `finalizeScorecard` computes `unresolvable_rate = unresolvable_count / (resolved + unresolvable_count)`, NULL when both are zero.
 - **`src/core/postgres-engine.ts`** + **`src/core/pglite-engine.ts`** — `getScorecard` SQL now filters `resolved` to the 3-state subset `('correct','incorrect','partial')` (deliberately, NOT `IS NOT NULL`) so historical comparisons stay valid. New `COUNT(*) FILTER (WHERE resolved_quality = 'unresolvable') AS unresolvable_count` aggregate.
 - **`src/core/utils.ts`** — `rowToTake` type cast widened for the 4th quality state.
 - **`src/core/takes-fence.ts`** — `TakeQuality` type union + `QUALITY_VALUES` set widened to include `'unresolvable'`, so markdown fence parsing accepts the new state alongside CLI and SDK.
 - **`src/commands/takes.ts`** — `gbrain takes resolve --quality` now accepts `unresolvable`. The deprecated `--outcome` boolean alias cannot express unresolvable (same as partial); error message updated.
 
 #### Tests
-- **`test/takes-resolution.test.ts`** — three new cases for `deriveResolutionTuple` covering the unresolvable mapping and contradiction rejection; three new cases for `finalizeScorecard` covering the sibling-field semantics (resolved stays 3-state, unresolvable_rate populates from siblings, legacy pre-v79 raw shape backfills cleanly).
-- **`test/migrate.test.ts`** — four structural assertions on the v79 entry (name, idempotency, both CHECK widenings, regression guard that pre-existing legal pairs aren't dropped) plus six PGLite E2E cases exercising the round-trip: R1 unresolvable persists, R2 pre-v79 `(NULL, NULL)` survives, R3 partial+true still rejected, R4 unresolvable+true/false still rejected, R5 `getScorecard` surfaces the new sibling fields.
+- **`test/takes-resolution.test.ts`** — three new cases for `deriveResolutionTuple` covering the unresolvable mapping and contradiction rejection; three new cases for `finalizeScorecard` covering the sibling-field semantics (resolved stays 3-state, unresolvable_rate populates from siblings, legacy pre-v80 raw shape backfills cleanly).
+- **`test/migrate.test.ts`** — four structural assertions on the v80 entry (name, idempotency, both CHECK widenings, regression guard that pre-existing legal pairs aren't dropped) plus six PGLite E2E cases exercising the round-trip: R1 unresolvable persists, R2 pre-v80 `(NULL, NULL)` survives, R3 partial+true still rejected, R4 unresolvable+true/false still rejected, R5 `getScorecard` surfaces the new sibling fields.
 
 #### Docs
 - **`docs/architecture/calibration-quality-gate-spec.md`** — preserved from PR #1191 (now closed) with a historical-context header noting the two-wave split. v0.37.2.0 ships the CHECK fix; the follow-up feature wave ships the rest.
@@ -78,6 +78,61 @@ If anything still fails, file an issue at https://github.com/garrytan/gbrain/iss
 #### For contributors
 - The v0.36.1.0 calibration phases (`propose_takes`, `grade_takes`, `calibration_profile`) were correct: `grade-takes.ts` already returned `null` for unresolvable verdicts so they didn't try to write to the takes table. The bug was external grading scripts (and the future promote path, when it lands) writing the verdict directly. The hotfix lets either path land the same row shape.
 
+## [0.37.1.0] - 2026-05-19
+
+**Your brain can now collide its own ideas.**
+
+You type `gbrain brainstorm "why are AI coding tools converging on the same UX?"` and get back five ideas. Each one cites two pages from your own notes: one that's close to the question, and one from a part of your brain that has no business being there. You see the slugs, you see how far the collision actually traveled (a 0-1 distance score next to each idea), and you can click through to read the source pages. Five minutes ago you didn't know your brain had those connections. The judge filters out anything trivial. Cost about 10 cents.
+
+Then you try `gbrain lsd` on the same question. Lateral Synaptic Drift. The dial is turned to 11: twelve pages from twelve different parts of your brain, the judge is inverted (rejects ideas that score too high on coherence — "too obvious, you'd have thought of this without LSD"), and the system explicitly prefers pages you haven't looked at in 90 days. Most of what comes back is noise. One of them is the thing your brain noticed in its sleep.
+
+This is bisociation, the Arthur Koestler thing. The Open Collider project demonstrated 4-13x distance shift over default prompting. Their version invents distant domains from training data. Ours uses what you already wrote down. That difference matters: every idea cites a real slug in your brain. You can audit it. You can trust it.
+
+**How to turn it on**
+
+```bash
+gbrain upgrade                                    # applies migration v79
+gbrain brainstorm "your question here"            # ~$0.10 per run
+gbrain lsd "your question here"                   # ~$0.30 per run
+gbrain doctor                                     # see brainstorm_health check
+```
+
+By default `brainstorm` saves to `wiki/ideas/<date>-brainstorm-<slug>.md` and `lsd` does not save (its output is ephemeral by design — pass `--save` if an idea lands). The dream cycle skips `mode: lsd` pages automatically so noise does not pollute the calibration profile.
+
+**The numbers that matter**
+
+| Mode | Close set | Far set | Ideas per cross | Judge threshold | Vibe |
+|---|---|---|---|---|---|
+| brainstorm | 4 | 6 | 3 | weighted 4.0/5 | Analyst riffing with their own notes. Defensible. |
+| lsd | 2 | 12 | 4 | inverted: rejects resistance >4.5 | Your brain at 3am noticing what it forgot. |
+
+**Things to watch**
+
+- The "far set" comes from prefix-stratified sampling. One page per top-level prefix (`wiki/vc`, `wiki/biology`, `concepts/`, etc), tiebroken by inbound link count. If your brain has only one or two top-level prefixes you will see a stderr warning that the bank was narrower than usual. Add more cross-domain content via `gbrain import` and the next run gets sharper.
+- LSD's stale-page bias works off a new column `pages.last_retrieved_at` bumped when `search`/`query`/`get_page` returns results. Default-on. If you do not want per-search writes, `gbrain config set search.track_retrieval false` opts out (LSD then runs without the stale-preference signal but still works). Internal callers (sync, migrations, dream cycle) never bump the column — the signal stays clean.
+- Calibration cold-start: if your `calibration_profiles` row has no `active_bias_tags`, the judge runs without anti-bias context and stderr-warns. Both commands still work; the judge just is not penalizing your known biases.
+
+### Itemized changes
+
+**New commands** — `gbrain brainstorm <question>` and `gbrain lsd <question>`, both CLI-only. `gbrain eval brainstorm <fixture.jsonl>` is the three-axis evaluation gate (distance + usefulness + grounding, all three must clear).
+
+**New module** — `src/core/brainstorm/{domain-bank,orchestrator,judges}.ts`. One `judges.ts` exports a shared `runJudge(config, ideas)` plus `BRAINSTORM_JUDGE_CONFIG` + `LSD_JUDGE_CONFIG`, so the two modes share judge plumbing.
+
+**New engine surface** — `BrainEngine.listPrefixSampledPages(opts)` + `BrainEngine.listCorpusSample(opts)`, parity on both Postgres and PGLite. Both accept `sourceId?` and `sourceIds?` for federated-read scoping.
+
+**Schema migration v79** — `pages.last_retrieved_at TIMESTAMPTZ NULL` + full B-tree index on `pages (last_retrieved_at)`. Forward-reference bootstrap added on both engines so pre-v79 brains upgrade cleanly.
+
+**Op-layer write-back** — `src/core/last-retrieved.ts` exports `bumpLastRetrievedAt(engine, pageIds)`. Called fire-and-forget from the `search`/`query`/`get_page` op handlers after results return. 5-minute throttle via the SQL `WHERE last_retrieved_at IS NULL OR last_retrieved_at < NOW() - INTERVAL '5 minutes'` clause skips ~90% of writes on heavily-searched brains.
+
+**Dream-cycle skip** — `src/core/cycle/transcript-discovery.ts` extends `isDreamOutput(content)` to also skip pages with `mode: lsd` frontmatter (noise-by-design). New exports `isLsdOutput()` and `isBrainstormOutput()` for downstream callers.
+
+**Doctor check** — `brainstorm_health` surfaces three signals: migration v79 applied, `search.track_retrieval` setting, calibration cold-start status. Paste-ready fix hints per signal.
+
+**Tests** — 38 new unit tests across `test/brainstorm/{distance,lsd-mode-skip,eval-brainstorm}.test.ts`. Pin distance normalization (same-vector → 0, orthogonal → 0.5, opposite → 1, dimension mismatch throws), LSD frontmatter detection, eval verdict logic, fixture parsing.
+
+## To take advantage of v0.37.1.0
+
+`gbrain upgrade` should do this automatically. If it did not:
 ## [0.37.0.0] - 2026-05-19
 
 **Skillpacks become a real ecosystem. You can ship one, someone else can install it, and gbrain has an opinion about quality.**
@@ -226,6 +281,22 @@ Auto-flip prompt fires at coverage=100% so the last step is suggested inline.
    ```bash
    gbrain apply-migrations --yes
    ```
+2. **Verify migration v79 landed:**
+   ```bash
+   gbrain doctor --json | grep '"schema_version"'
+   ```
+   Should show: `"Version 79 (latest: 79)"`
+3. **Try it:**
+   ```bash
+   gbrain brainstorm "your question here"
+   gbrain lsd "your question here" --save
+   ```
+4. **Check brainstorm_health:**
+   ```bash
+   gbrain doctor --json | grep brainstorm_health
+   ```
+   Should show: `"Migration v79 applied; tracking enabled..."`
+5. **If anything fails,** file an issue at https://github.com/garrytan/gbrain/issues with the output of `gbrain doctor` and `~/.gbrain/upgrade-errors.jsonl` if present.
 2. **Verify the new surface:**
    ```bash
    gbrain doctor | grep -E 'modal|cross'

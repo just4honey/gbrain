@@ -7,9 +7,9 @@
 >   CHECK constraint to accept `quality='unresolvable'` as a 4th valid state.
 >   Unblocks the production grading script. Adds `unresolvable_count` +
 >   `unresolvable_rate` to `TakesScorecard` as sibling fields (preserves
->   v0.36.1.0 historical comparison semantics). Migration renumbered v74→v79
->   during master merge — v0.37.0.0's autonomous-remediation wave claimed
->   v68-v78 in parallel.
+>   v0.36.1.0 historical comparison semantics). Migration renumbered v74→v79→v80
+>   during successive master merges — v0.37.0.0's autonomous-remediation wave
+>   claimed v68-v78, then v0.37.1.0 (brainstorm/lsd) claimed v79.
 > - **Follow-up minor** (forthcoming): falsifiability + category extraction at
 >   `propose_takes`, SQL-side grade gate, per-category calibration scorecards,
 >   pg_trgm-based proposal dedup. Wave-blocking on cat15 F1 re-validation
