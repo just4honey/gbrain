@@ -2,7 +2,7 @@
 
 All notable changes to GBrain will be documented in this file.
 
-## [0.37.4.0] - 2026-05-20
+## [0.37.6.0] - 2026-05-20
 
 **One key, many hosted models.**
 
@@ -51,7 +51,7 @@ Four new test files prove the seam reaches the wire, not just the return shape:
 
 Cherry-picked from [#1210](https://github.com/garrytan/gbrain/pull/1210). Contributed by @davemorin; corrections from an outside-voice review (Codex) folded in: recipe count math (16 not 17), current OR attribution header name (`X-OpenRouter-Title` preferred, `X-Title` back-compat), `max_batch_tokens` semantic (aggregate not per-input), Matryoshka dims for `text-embedding-3-small`, and the auth-shadow guard at `applyResolveAuth`.
 
-## To take advantage of v0.37.4.0
+## To take advantage of v0.37.6.0
 
 `gbrain upgrade` should do this automatically. If it didn't, or if you want to verify the recipe shipped:
 
