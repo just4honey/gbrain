@@ -3871,6 +3871,68 @@ export const MIGRATIONS: Migration[] = [
     `,
   },
   {
+    version: 84,
+    name: 'oauth_clients_agent_binding',
+    // v0.38 Slice 3 — D13 + codex P1 + P2 — registration-time binding for
+    // OAuth clients that hold the `agent` scope. The binding fields are
+    // each-or-nothing: if the client's allowed_scopes includes 'agent', the
+    // registrar MUST pass all five binding flags. The submit_agent op
+    // validates each param against the binding row at dispatch time.
+    //
+    //   - bound_tools TEXT[]: subset of brain-safe ops this client may
+    //     reference in submit_agent allowed_tools.
+    //   - bound_source_id TEXT: which source (database axis) the agent
+    //     writes to. FK to sources.id with ON DELETE SET NULL so a
+    //     source-delete doesn't dangling-reference the client.
+    //   - bound_brain_id TEXT: which mounted brain (multi-brain installs).
+    //   - bound_slug_prefixes TEXT[]: put_page namespace allowlist.
+    //   - bound_max_concurrent INTEGER: per-client concurrency cap on
+    //     in-flight subagent jobs.
+    //
+    // All NULL on pre-v84 clients. The submit_agent op refuses dispatch
+    // when scope='agent' is present but bindings are NULL — opt-in only.
+    idempotent: true,
+    sql: `
+      ALTER TABLE oauth_clients
+        ADD COLUMN IF NOT EXISTS bound_tools TEXT[] NULL,
+        ADD COLUMN IF NOT EXISTS bound_source_id TEXT NULL,
+        ADD COLUMN IF NOT EXISTS bound_brain_id TEXT NULL,
+        ADD COLUMN IF NOT EXISTS bound_slug_prefixes TEXT[] NULL,
+        ADD COLUMN IF NOT EXISTS bound_max_concurrent INTEGER NOT NULL DEFAULT 1;
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'fk_oauth_clients_bound_source'
+        ) THEN
+          BEGIN
+            ALTER TABLE oauth_clients
+              ADD CONSTRAINT fk_oauth_clients_bound_source
+              FOREIGN KEY (bound_source_id)
+              REFERENCES sources(id) ON DELETE SET NULL;
+          EXCEPTION WHEN others THEN
+            -- sources table may not exist on minimal installs; skip silently.
+            NULL;
+          END;
+        END IF;
+      END$$;
+    `,
+    sqlFor: {
+      pglite: `
+        ALTER TABLE oauth_clients
+          ADD COLUMN IF NOT EXISTS bound_tools TEXT[] NULL;
+        ALTER TABLE oauth_clients
+          ADD COLUMN IF NOT EXISTS bound_source_id TEXT NULL;
+        ALTER TABLE oauth_clients
+          ADD COLUMN IF NOT EXISTS bound_brain_id TEXT NULL;
+        ALTER TABLE oauth_clients
+          ADD COLUMN IF NOT EXISTS bound_slug_prefixes TEXT[] NULL;
+        ALTER TABLE oauth_clients
+          ADD COLUMN IF NOT EXISTS bound_max_concurrent INTEGER NOT NULL DEFAULT 1;
+      `,
+    },
+  },
+  {
     version: 83,
     name: 'oauth_clients_budget_usd_per_day',
     // v0.38 Slice 2 — D2 + D3 — per-OAuth-client daily budget cap.
