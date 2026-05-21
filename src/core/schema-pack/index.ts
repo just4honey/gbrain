@@ -97,3 +97,8 @@ export {
   inferLinkTypeFromPack,
   frontmatterLinkTypeFromPack,
 } from './link-inference.ts';
+
+export {
+  expertTypesFromPack,
+  expertTypesFromPackOrThrow,
+} from './expert-types.ts';
