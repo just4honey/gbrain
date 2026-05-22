@@ -832,6 +832,28 @@ export class PostgresEngine implements BrainEngine {
     `;
   }
 
+  async updatePageContextualRetrievalState(
+    slug: string,
+    sourceId: string,
+    mode: string,
+    corpusGeneration: string | null,
+  ): Promise<void> {
+    const sql = this.sql;
+    // Narrow UPDATE — bumps updated_at as a side effect so the autopilot
+    // sweep doesn't think the page hasn't changed since last touch. Skips
+    // soft-deleted rows. corpus_generation nullable (caller passes NULL
+    // for the 'none' tier path).
+    await sql`
+      UPDATE pages
+      SET contextual_retrieval_mode = ${mode},
+          corpus_generation = ${corpusGeneration},
+          updated_at = now()
+      WHERE source_id = ${sourceId}
+        AND slug = ${slug}
+        AND deleted_at IS NULL
+    `;
+  }
+
   async migrateFactsToCanonical(
     phantomSlug: string,
     canonicalSlug: string,

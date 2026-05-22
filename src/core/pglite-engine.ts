@@ -768,6 +768,26 @@ export class PGLiteEngine implements BrainEngine {
     );
   }
 
+  async updatePageContextualRetrievalState(
+    slug: string,
+    sourceId: string,
+    mode: string,
+    corpusGeneration: string | null,
+  ): Promise<void> {
+    // Parity with PostgresEngine — narrow stamp of the two CR-state
+    // columns. corpus_generation nullable for the 'none' tier path.
+    await this.db.query(
+      `UPDATE pages
+         SET contextual_retrieval_mode = $1,
+             corpus_generation = $2,
+             updated_at = now()
+       WHERE source_id = $3
+         AND slug = $4
+         AND deleted_at IS NULL`,
+      [mode, corpusGeneration, sourceId, slug],
+    );
+  }
+
   async migrateFactsToCanonical(
     phantomSlug: string,
     canonicalSlug: string,
