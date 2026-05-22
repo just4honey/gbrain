@@ -1659,17 +1659,39 @@ export class PostgresEngine implements BrainEngine {
     // predicate on embedded_at would silently skip the row. This is why the egress fix predicates
     // on `embedding IS NULL` rather than `embedded_at IS NULL` — and it's why we now keep both
     // columns honest at write time.
+    //
+    // v0.40.3.0 D24 NULL→non-NULL race fix (TODOS.md v0.35.x item).
+    // Two writers racing on the same chunk (e.g., autopilot sync + manual
+    // `embed --stale` + contextual reindex) previously raced last-write-wins
+    // via `COALESCE(EXCLUDED.embedding, content_chunks.embedding)`. With
+    // per-chunk Haiku synopsis the cost of an overwrite jumped from
+    // ~$0.000001 to ~$0.0003. New rule for the text-unchanged branch:
+    //   - existing is NULL → take new (cold path, no race)
+    //   - new is fresher (embedded_at > existing.embedded_at) → take new
+    //   - otherwise → keep existing (slower writer with stale embedding loses)
+    // Mirrored in pglite-engine.ts; pinned by test/e2e/concurrent-embed-race.test.ts.
     await sql.unsafe(
       `INSERT INTO content_chunks ${cols} VALUES ${rows.join(', ')}
        ON CONFLICT (page_id, chunk_index) DO UPDATE SET
          chunk_text = EXCLUDED.chunk_text,
          chunk_source = EXCLUDED.chunk_source,
-         embedding = CASE WHEN EXCLUDED.chunk_text != content_chunks.chunk_text THEN EXCLUDED.embedding ELSE COALESCE(EXCLUDED.embedding, content_chunks.embedding) END,
+         embedding = CASE
+           WHEN EXCLUDED.chunk_text != content_chunks.chunk_text THEN EXCLUDED.embedding
+           WHEN content_chunks.embedding IS NULL THEN EXCLUDED.embedding
+           WHEN EXCLUDED.embedded_at IS NOT NULL
+                AND (content_chunks.embedded_at IS NULL OR EXCLUDED.embedded_at > content_chunks.embedded_at)
+                THEN EXCLUDED.embedding
+           ELSE content_chunks.embedding
+         END,
          model = COALESCE(EXCLUDED.model, content_chunks.model),
          token_count = EXCLUDED.token_count,
          embedded_at = CASE
            WHEN EXCLUDED.chunk_text != content_chunks.chunk_text AND EXCLUDED.embedding IS NULL THEN NULL
-           ELSE COALESCE(EXCLUDED.embedded_at, content_chunks.embedded_at)
+           WHEN content_chunks.embedding IS NULL AND EXCLUDED.embedding IS NOT NULL THEN EXCLUDED.embedded_at
+           WHEN EXCLUDED.embedded_at IS NOT NULL
+                AND (content_chunks.embedded_at IS NULL OR EXCLUDED.embedded_at > content_chunks.embedded_at)
+                THEN EXCLUDED.embedded_at
+           ELSE content_chunks.embedded_at
          END,
          language = EXCLUDED.language,
          symbol_name = EXCLUDED.symbol_name,
