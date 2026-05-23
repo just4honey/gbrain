@@ -124,14 +124,34 @@ function defaultAuditPath(): string {
 }
 
 /**
- * Provider id prefixes that always price at $0 (electricity, not API tokens).
- * Centralized here so `--max-cost` callers don't hard-fail TX2 when a local
- * rerank provider is configured. Matched against the provider half of the
- * `provider:model` string. Extend this set when adding new local-inference
- * recipes.
+ * Provider id prefixes that always price at $0 for the rerank kind
+ * (electricity, not API tokens). Centralized here so `--max-cost` callers
+ * don't hard-fail TX2 when a local rerank provider is configured. Matched
+ * against the provider half of the `provider:model` string. Extend this set
+ * when adding new local-inference rerank recipes.
  */
 const FREE_LOCAL_RERANK_PROVIDERS: ReadonlySet<string> = new Set([
   'llama-server-reranker',
+]);
+
+/**
+ * Provider id prefixes whose embeddings run on local inference (electricity,
+ * not API tokens) and so price at $0. Without this, a `--max-cost`-bounded
+ * embed/reindex job configured for a local provider TX2 hard-fails because
+ * lookupEmbeddingPrice has no entry for them. Matched against the provider
+ * half of the `provider:model` string.
+ *
+ * 'lmstudio' is intentionally excluded — no lmstudio recipe is registered, so
+ * `lmstudio:` model strings never resolve (the env mapping in cli.ts is
+ * pre-existing dead plumbing). 'litellm' is excluded too — a LiteLLM proxy can
+ * front a paid provider, so pricing-unknown is the honest state there.
+ *
+ * Sibling to FREE_LOCAL_RERANK_PROVIDERS; v0.41+ TODO unifies them via
+ * recipe-cost-driven resolution.
+ */
+const FREE_LOCAL_EMBED_PROVIDERS: ReadonlySet<string> = new Set([
+  'ollama',
+  'llama-server',
 ]);
 
 /**
@@ -141,8 +161,9 @@ const FREE_LOCAL_RERANK_PROVIDERS: ReadonlySet<string> = new Set([
  * Strategy:
  *   - Chat: try the bare model id in ANTHROPIC_PRICING first (legacy keys
  *     are bare claude-* ids). Fall back to the provider-prefixed key.
- *   - Embed: lookupEmbeddingPrice already handles the provider:model form,
- *     defaulting to openai when the colon is missing.
+ *   - Embed: lookupEmbeddingPrice handles the provider:model form; on a miss,
+ *     local-inference providers (FREE_LOCAL_EMBED_PROVIDERS) price at $0 so
+ *     `--max-cost` callers don't hard-fail.
  *   - Rerank: try ANTHROPIC_PRICING (legacy path for any Claude-priced
  *     rerank); else if the provider half is in FREE_LOCAL_RERANK_PROVIDERS,
  *     return zero pricing so `--max-cost` callers don't TX2 hard-fail on
@@ -153,6 +174,10 @@ function lookupPricing(modelId: string, kind: BudgetKind): ModelPricing | null {
     const hit = lookupEmbeddingPrice(modelId);
     if (hit.kind === 'known') {
       return { input: hit.pricePerMTok, output: 0 };
+    }
+    // v0.40.x: local-inference embed providers cost electricity, not tokens.
+    if (hit.kind === 'unknown' && FREE_LOCAL_EMBED_PROVIDERS.has(hit.provider)) {
+      return { input: 0, output: 0 };
     }
     return null;
   }
