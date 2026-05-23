@@ -35,27 +35,47 @@ FOUND=0
 # where redactSourceConfig is NOT used in the same hunk.
 RAW_PATTERN='\b(\.config\b|config:[[:space:]]*src\.config)\b'
 
+# Tightened patterns: match serializers that pass a source-row's .config
+# field (source.config, src.config, row.config, s.config, or a property
+# access like `.config` on an object likely sourced from a `sources` row),
+# NOT every variable named "config" (which would catch global gbrain config).
+#
+# The risk pattern is `JSON.stringify(<srcVar>.config)` where srcVar holds
+# a row from the sources table. Variables that hold the GLOBAL gbrain
+# config.json are also commonly named `config` — that's a different shape
+# and a different threat model (already protected at the file-mode 0o600
+# write site in src/core/config.ts).
+#
+# rg uses `-g` for globs; grep -rE uses `--include`. Branch accordingly so
+# CI runners without rg still match cleanly.
 if command -v rg >/dev/null 2>&1; then
-  GREP="rg"
+  CANDIDATES=$(rg -n \
+    -e 'JSON\.stringify\((source|src|row|s)\.config' \
+    -e 'res\.json\((source|src|row|s)\.config' \
+    -e 'res\.json\(\{[^}]*\.config[^.]' \
+    -e 'console\.log\(JSON\.stringify\((source|src|row|s)\.config' \
+    -g '*.ts' \
+    src/ 2>/dev/null || true)
 else
-  GREP="grep -rE"
+  CANDIDATES=$(grep -rEn \
+    -e 'JSON\.stringify\((source|src|row|s)\.config' \
+    -e 'res\.json\((source|src|row|s)\.config' \
+    -e 'res\.json\(\{[^}]*\.config[^.]' \
+    -e 'console\.log\(JSON\.stringify\((source|src|row|s)\.config' \
+    --include='*.ts' \
+    src/ 2>/dev/null || true)
 fi
 
-CANDIDATES=$($GREP -n \
-  -e 'JSON\.stringify\(.*config' \
-  -e 'res\.json\(.*config' \
-  -e 'res\.json\(\{[^}]*\.config' \
-  -e 'console\.log\(JSON\.stringify\(.*config' \
-  --include='*.ts' \
-  src/ 2>/dev/null || true)
-
-# Filter out files we trust
+# Filter out files we trust (handle sources.config redaction themselves OR
+# handle the gbrain global config, which is a different object).
 FILTERED=$(echo "$CANDIDATES" | \
   grep -v 'src/core/source-config-redact.ts' | \
   grep -v 'src/core/sources-load.ts' | \
   grep -v 'src/commands/sources.ts' | \
   grep -v 'src/core/migrate.ts' | \
-  grep -v 'src/core/sources-ops.ts' || true)
+  grep -v 'src/core/sources-ops.ts' | \
+  grep -v 'src/commands/init.ts' | \
+  grep -v 'src/core/config.ts' || true)
 
 if [ -n "$FILTERED" ]; then
   # For each candidate, check if redactSourceConfig appears within 10 lines above.
