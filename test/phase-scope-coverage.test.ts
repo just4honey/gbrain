@@ -41,11 +41,12 @@ describe('PHASE_SCOPE coverage', () => {
     expect(invalid).toEqual([]);
   });
 
-  test('all 16 phases covered (regression on accidental omission)', () => {
+  test('all 17 phases covered (regression on accidental omission)', () => {
     // Pin the count so a future PR that adds a phase to ALL_PHASES
-    // without updating PHASE_SCOPE notices here too.
-    expect(ALL_PHASES.length).toBe(16);
-    expect(Object.keys(PHASE_SCOPE).length).toBe(16);
+    // without updating PHASE_SCOPE notices here too. The v0.39.1.0
+    // master merge brought in the 17th phase (`schema-suggest`).
+    expect(ALL_PHASES.length).toBe(17);
+    expect(Object.keys(PHASE_SCOPE).length).toBe(17);
   });
 
   test('embed remains global (the headline brain-wide phase)', () => {
