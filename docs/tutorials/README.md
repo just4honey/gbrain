@@ -4,13 +4,12 @@ Step-by-step walkthroughs that take you from zero to a working outcome. Concrete
 
 ## Shipped
 
+- [**Set up your personal AI agent + brain from zero**](personal-brain.md) — the canonical solo install. Two GitHub repos, a Telegram bot, AlphaClaw on Render, OpenClaw + GBrain + Supabase. End-to-end in about 2 hours; about $100 to $150 a month sustained. The full-stack install I'd run today.
 - [**Set up GBrain as your company brain**](company-brain.md) — federated, multi-user, OAuth-scoped institutional memory for a 10-50 person team. Three sources (shared / customers / internal-only), per-user scope, first synthesized query as a teammate. About 90 minutes end-to-end, about $5 in API calls for the demo, under $100 a month sustained for a 25-person company.
 
 ## In progress
 
 These are the next tutorials on the roadmap. Open an issue if one of them is the one you need most; that's how we'll prioritize.
-
-- **Set up your personal brain in 30 minutes** — the solo install, hand-holding version. Currently the README install gets you there in recipe form; this tutorial walks the learner through every step the first time. For people who want to try GBrain on their own notes before pitching it for the company.
 
 - **Connect GBrain to your existing agent** — for users who already run [OpenClaw](https://github.com/garrytan/openclaw), [Hermes](https://github.com/garrytan/hermes), Claude Code, Cursor, or any MCP-aware client. Wire GBrain in as the memory layer, scaffold the 43 skills, see brain-first lookup fire on the next message your agent gets.
 
