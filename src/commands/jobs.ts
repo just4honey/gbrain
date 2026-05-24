@@ -545,6 +545,37 @@ HANDLER TYPES (built in)
         console.log('  No jobs in the last 24 hours.');
       }
       console.log(`\n  Queue health: ${stats.queue_health.waiting} waiting, ${stats.queue_health.active} active, ${stats.queue_health.stalled} stalled`);
+
+      // v0.41 Bug 2 / Eng D8 — surface lease pressure to the operator.
+      // Reads minion_lease_pressure_log windowed at 1h. Best-effort: pre-v93
+      // brains (no table) silently skip; the queue_health line above is the
+      // operator's primary signal in that case.
+      try {
+        const lpRows = await engine.executeRaw<{ count: string }>(
+          `SELECT count(*)::text AS count FROM minion_lease_pressure_log
+            WHERE bounced_at > now() - interval '1 hour'`,
+        );
+        const lpCount = parseInt(lpRows[0]?.count ?? '0', 10);
+        if (lpCount > 0) {
+          // Also surface whether any of those bounces stalled forward progress.
+          // Bounces with rising completed counts = healthy backpressure; bounces
+          // with zero completes = real blocker (matches doctor's subagent_health).
+          const completedRows = await engine.executeRaw<{ count: string }>(
+            `SELECT count(*)::text AS count FROM minion_jobs
+              WHERE finished_at > now() - interval '1 hour'
+                AND status = 'completed' AND name = 'subagent'`,
+          ).catch(() => [{ count: '0' }]);
+          const completed = parseInt(completedRows[0]?.count ?? '0', 10);
+          const tag = completed > 0
+            ? `(${completed} subagent job${completed === 1 ? '' : 's'} completed, throughput healthy)`
+            : `(no subagent jobs completed — cap may be too tight; \`export GBRAIN_ANTHROPIC_MAX_INFLIGHT=64\`)`;
+          console.log(`  Lease pressure (1h): ${lpCount} bounce${lpCount === 1 ? '' : 's'} ${tag}`);
+        } else {
+          console.log(`  Lease pressure (1h): 0 bounces`);
+        }
+      } catch {
+        // Pre-v93 brain — no table. Silent skip.
+      }
       break;
     }
 
