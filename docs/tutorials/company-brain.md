@@ -87,6 +87,16 @@ git clone git@github.com:your-org/internal-docs.git internal
 
 You can also keep the existing personal-brain repo as one of the sources. Just pick the role it plays (probably `shared` if it's already org-wide content).
 
+### Two scoping models (pick the one that matches your shape)
+
+There are two ways to scope teammates' access. They suit different deployment shapes.
+
+**Model A: separate sources with OAuth scoping (recommended for true multi-user with different AI clients).** What this tutorial walks you through. Each teammate gets their own OAuth client, which carries `--source` + `--federated-read` flags. The brain refuses cross-source reads at the SQL layer; isolation is database-enforced. Each teammate can run their own MCP-aware client (Claude Code, Cursor, their own OpenClaw, etc.) and the scoping holds.
+
+**Model B: one source, directory-based per-person scoping (simpler for one-agent-serves-everyone setups).** The shape I actually run in production: a single source called `default`, with a `partners/<slug>/` convention inside it (e.g. `partners/alice-example/`, `partners/bob-example/`). Each partner gets their own subdirectory holding their personal pages: `partners/alice-example/USER.md`, `partners/alice-example/concepts/`, `partners/alice-example/sources/`, etc. There's no OAuth-enforced isolation; the agent itself enforces "alice's writes go to her partners/ subdir." This is the right model when ONE agent (yours) serves everyone over Telegram or a single shared interface. It's simpler ops, no per-user OAuth, but the scoping is convention-only.
+
+For most company-brain installs (10+ teammates each with their own AI client), Model A is the right starting point. If you're running the fat-agent-serves-everyone pattern from the personal-brain tutorial, Model B is genuinely simpler. You can also mix: separate sources for the obviously-different ones (customer notes vs internal-only) AND a `partners/<slug>/` convention inside the shared source for per-person workspace.
+
 ### Per-person folder structure inside each source
 
 Inside each source, give each teammate their own subfolder. This is the structure I run:
@@ -299,9 +309,78 @@ That creates the directory + SKILL.md + routing entry. Edit the SKILL.md to desc
 
 Per-person scoping for skills is handled at the routing layer: a skill can declare `allowed_clients: [carol-example]` in its frontmatter. If alice asks her agent to run that skill, the agent refuses with "this skill is scoped to carol-example."
 
+### Shared rule files at the skills root
+
+Alongside individual skill directories, drop a few flat `_*-rules.md` files at the root of `skills/`. These are conventions that EVERY skill reads. The ones I run in production:
+
+- `_brain-filing-rules.md`. the iron-rule decision tree for "where does this new page belong?" Numbered first-match-wins rules (people go in `people/`, companies in `companies/`, meetings in `meetings/`, etc.). Every ingest skill consults this before creating a page.
+- `_output-rules.md`. output quality standards (deterministic links built from API data not LLM-composed strings, exact-phrasing requirements for citations, no AI-slop vocabulary).
+- `_excluded-people.md`. a privacy gate. Names that must never be referenced or attributed in the brain even if they appear in source material. Re-attribute or discard. This is the file that prevents your agent from accidentally publishing things about people you've decided aren't fair game.
+- `_operating-rules.md`. operational conventions (when to write to brain vs scratchpad, when to ask for confirmation, when to fire a notification).
+- `_x-ingestion-rules.md`, `_x-api-rules.md`. per-source rules for specific integrations (Twitter, in this case).
+
+These files turn into the de facto company policy for the agent. Edit one, and every skill that reads it picks up the new rule on the next request. Versioned in git, reviewable in PR.
+
 ---
 
-## Part 8: Connect each teammate's AI client
+## Part 8: Wire Slack carefully
+
+Slack is the integration most teams want first, and it has enough sharp edges to deserve its own callout. The conventions I run:
+
+**Two crons, two jobs.** One scan cron that runs every 5-15 minutes and surfaces signals (new threads in channels you care about, mentions of your teammates, decisions). One archive cron that runs nightly and stores the full conversation history. Splitting them this way means urgent signals get acted on fast while the slow archive work doesn't crowd the live channel.
+
+**Channel-to-task-ID mapping.** Don't have your agent reference Slack channels by their actual channel IDs (`C03A8...`). Build a `topic-registry.json` (or similar) that maps each channel ID to a friendly task name (`acme-co-customer-success`, `engineering-standup`). Crons and skills reference channels by friendly name; the registry translates to IDs at runtime. This is the file you edit when a channel gets renamed or replaced.
+
+**Deterministic links only.** When your agent writes a brain page that cites a Slack message, the link MUST be built from API data (workspace ID + channel ID + message timestamp), never composed by the LLM. LLMs hallucinate Slack URLs constantly. The convention lives in `_output-rules.md`; every skill that touches Slack inherits it.
+
+**Dismissed-items state.** The scan cron remembers what it has already surfaced. If a channel had a thread on Tuesday that turned out to be noise, the dismissed-items file records it so the Wednesday scan doesn't surface it again. Without this, re-scans become a flood of repeat signals.
+
+**Per-channel scoping mirrors per-person scoping.** Sensitive channels (#executive, #legal, #performance) should be scoped to teammates with the appropriate `--federated-read`. The brain stores everything, but who can query for it is gated by the same OAuth client model from Part 5.
+
+The actual skills that implement this in production are named `slack`, `slack-scan`, `slack-archive`. Scaffold equivalents in your workspace with `gbrain skillify scaffold slack-scan`, then edit the generated SKILL.md to declare your channel mapping and triggers.
+
+---
+
+## Part 9: Onboard each teammate yourself (the botmaster pattern)
+
+This is the part that decides whether your company brain actually gets adopted or sits unused.
+
+**Do not just hand a new teammate their OAuth credential and tell them to "try it out."** They'll send one query, get a result that doesn't feel personal yet (because their slice is empty), conclude it's not useful, and never come back.
+
+What works instead: I personally onboard each new teammate myself. The flow looks like this.
+
+### Step 1: Pre-populate their slice
+
+Before they ever log in, I seed their `partners/<their-slug>/` directory (or their dedicated source) with the context they need to feel like the brain already knows them:
+
+- `partners/alice-example/USER.md`. a one-page profile: role, focus areas, current top 3 priorities, the kind of questions they tend to ask, the kind of writing they prefer (terse vs detailed, casual vs formal).
+- `partners/alice-example/concepts/`. 5-10 frameworks or recurring themes that are specifically THEIRS. If alice runs sales, that's "pipeline stage definitions," "ICP criteria," "objection-handling playbooks."
+- `partners/alice-example/sources/`. links to the documents they care about (their team's shared docs, their inbox conventions, the dashboards they check).
+- 2-3 example brain entries that demonstrate the shape: a customer page they'd recognize, a meeting note from a recent meeting they attended, an idea they've shared with the team.
+
+Takes me maybe 20 minutes per teammate. The payoff: the moment they run their first query, the brain answers with their context, not a generic response. That's the difference between "this is a cool tool" and "this knows me."
+
+### Step 2: Walk them through 2-3 wow flows
+
+Before letting them DM the agent freely, I personally walk them through 2-3 specific flows that I know will land:
+
+1. A query that demonstrates synthesis: "ask the brain about [a customer they know well]. Notice how it pulls together pages from three sources into one answer with citations." This shows the brain layer in action.
+2. A query that demonstrates gap analysis: "ask the brain about [something it doesn't know yet]. Notice how it tells you what's missing instead of making it up." This builds trust.
+3. A write-back flow: "tell the brain about [a meeting they just had]. Notice how it auto-files, links to the other people who were there, and surfaces related history." This shows the agent's value as a capture tool, not just a query tool.
+
+These three flows take maybe 15 minutes total. By the end, the teammate has seen the brain do something they couldn't have done themselves in that time. They feel powerful.
+
+### Step 3: Graduate to DM only after the wow moment lands
+
+After the walkthrough, I give them their OAuth credential and the agent's DM (Telegram, Slack DM, whatever your interface is). I explicitly say "now you can ask it anything, write to it anytime, and it'll keep learning from you."
+
+The order matters. If you give them DM access first and expect them to discover the wow moments themselves, most won't. They'll send one generic query, get a generic answer, and bounce. The botmaster pattern (pre-populate → walk through → graduate to DM) flips the conversion rate.
+
+Repeat this flow for every new teammate. About 45 minutes per person, total. Compared to the cost of an unadopted internal tool, it's the best 45 minutes you'll spend.
+
+---
+
+## Part 10: Connect each teammate's AI client
 
 Each teammate runs their AI client (Claude Code, Cursor, Claude Desktop, OpenClaw, Hermes, whatever) configured to point at your brain server through their OAuth credentials.
 
@@ -339,7 +418,7 @@ For Claude Code, Cursor, OpenClaw, Hermes, and other clients, per-client setup s
 
 ---
 
-## Part 9: First real query as a teammate
+## Part 11: First real query as a teammate
 
 Have alice run a real query from her machine. The interesting verb is `gbrain think`, which gives back a synthesized answer instead of raw pages.
 
@@ -379,7 +458,7 @@ Bob asking the same question would get nothing about acme-co. He's not scoped to
 
 ---
 
-## Part 10: Operating the company brain
+## Part 12: Operating the company brain
 
 Three commands do most of the operational work.
 
@@ -407,7 +486,7 @@ The admin dashboard at `https://brain.acme-co.com/admin` shows live request volu
 
 ---
 
-## Part 11: Cost and speed expectations
+## Part 13: Cost and speed expectations
 
 Real numbers from the published benchmark, running the default stack (GBrain with ZeroEntropy for embedding + reranker):
 
@@ -423,7 +502,7 @@ For a 25-person company at sustained use, expect about $35 a month in embeddings
 
 ---
 
-## Part 12: Common gotchas
+## Part 14: Common gotchas
 
 ### "My teammate can't see anything"
 
