@@ -1,15 +1,15 @@
 # GBrain
 
-**Search gives you raw pages. Think gives you the answer.** GBrain is the brain layer your AI agent has been missing, and the only one that does synthesis, graph traversal, and gap analysis in one box.
+**Search gives you raw pages. GBrain gives you the answer, through a brain layer.** GBrain is the brain layer your AI agent has been missing, the only one that does synthesis, graph traversal, and gap analysis in one box.
 
 Built by the President and CEO of Y Combinator to run his actual AI agents. The production brain behind his OpenClaw and Hermes deployments: **146,646 pages, 24,585 people, 5,339 companies**, 66 cron jobs running autonomously. The agent ingests meetings, emails, tweets, voice calls, and original ideas while you sleep. It enriches every person and company it encounters. It fixes its own citations and consolidates memory overnight. You wake up smarter than when you went to bed.
 
 Lots of personal-knowledge systems give you keyword matching and grep in a box. GBrain does that, and adds two things nobody else ships together:
 
-- **`gbrain think`**: synthesized, well-cited answers across people, companies, deals, and ideas. Not "here are 10 chunks that mention your query"; an actual answer with citations and an explicit note on what the brain doesn't know yet. The gap analysis is the part that changes how you use the brain.
+- **A synthesis layer that gives you the actual answer.** Synthesized, well-cited prose across people, companies, deals, and ideas. Not "here are 10 chunks that mention your query"; an actual answer with citations and an explicit note on what the brain doesn't know yet. The gap analysis is the part that changes how you use the brain.
 - **A self-wiring knowledge graph.** Every page write extracts entity refs and creates typed edges (`attended`, `works_at`, `invested_in`, `founded`, `advises`) with zero LLM calls. Ask "who works at Acme AI?" or "what did Bob invest in this quarter?" and get answers vector search alone can't reach. Benchmarked: **P@5 49.1%, R@5 97.9%** on a 240-page Opus-generated rich-prose corpus, **+31.4 points P@5** over its graph-disabled variant and over ripgrep-BM25 + vector-only RAG by a similar margin. Full BrainBench scorecards live in the sibling [gbrain-evals](https://github.com/garrytan/gbrain-evals) repo.
 
-The point of building a 100K-page brain is to use it as a strategic moat. To never lose context. To query what's in your own head without re-reading it. `gbrain think` is what makes the moat usable. The 24/7 dream cycle is what keeps it sharp. Both run on your hardware, your DB, your keys.
+The point of building a 100K-page brain is to use it as a strategic moat. To never lose context. To query what's in your own head without re-reading it. The brain layer is what makes the moat usable. The 24/7 dream cycle is what keeps it sharp. Both run on your hardware, your DB, your keys.
 
 It's easier to ship a daemon that runs 24/7 to ingest, enrich, and consolidate than it is to keep an agent in chat working hard. GBrain is that daemon, generalized. Install in 30 minutes. Your agent does the work. As Garry's personal agent gets smarter, so does yours.
 
@@ -27,19 +27,19 @@ Pulled directly from `eval/reports/cat29-think-vs-search/2026-05-23-cat29.json` 
 Has the ARR of the Acme AI 0 company grown over time? What were the readings?
 ```
 
-| | Typical AI-memory stack (top-K vector retrieval, the shape MemPalace and most peer systems ship) | GBrain `think` |
+| | Typical AI-memory stack (top-K vector retrieval, the shape MemPalace and most peer systems ship) | GBrain's brain layer (one synthesized answer, run via `gbrain think`) |
 |---|---|---|
 | **Answer returned** (verbatim from the receipt) | <pre>Top retrieved pages:<br>1. companies/acme-co-0 — # Acme CO 0 A eval-frameworks company. Founded 2020. Focus area: [[concepts/agent-memory]]. Working on ai-infrastructure. ## Facts \| since \| claim \| metric \| value \| unit \| period \| \|-------\|-----<br>2. companies/crater-systems-5 — # Crater SYSTEMS 5 A autonomous-picking company. Founded 2022. Focus area: [[concepts/agent-memory]]...<br>3. companies/pulse-cloud-29 ...</pre> | <pre>## Answer<br><br>The question asks about "Acme AI 0". The brain contains a page for **Acme CO 0** [companies/acme-co-0] — no entity named "Acme AI 0" appears in the retrieved results. Assuming Acme CO 0 is the intended target, its ARR has grown consistently across all three readings:<br><br>- **2025-01-15**: ARR = $119,737 [companies/acme-co-0]<br>- **2025-08-20**: ARR = $502,387 (≈4.2× the prior reading) [companies/acme-co-0]<br>- **2026-04-10**: ARR = $841,657 (≈1.68× the prior reading) [companies/acme-co-0]</pre> |
 | **Haiku judge score** | **0 / 10** | **9 / 10** |
 | **Judge verdict** (verbatim) | *"The search results retrieved pages for incorrect companies (Crater Systems, Pulse Cloud, Vector AI, Titan Labs) instead of 'Acme AI 0', failed to extract or display any ARR metric values, and provided no information about ARR growth trajectory."* | *"Answer correctly identifies all three ARR readings in chronological order with accurate values and demonstrates consistent growth trajectory, with only minor deduction for the unresolved name discrepancy (Acme AI 0 vs Acme CO 0) which is transparently flagged rather than ignored."* |
 
-Three things `gbrain think` did that a typical top-K retrieval cannot:
+Three things the brain layer did that a typical top-K retrieval cannot:
 
-1. **Caught the name typo.** The question asked about "Acme AI 0"; the brain only has "Acme CO 0." Think flagged this transparently rather than silently returning the closest match.
+1. **Caught the name typo.** The question asked about "Acme AI 0"; the brain only has "Acme CO 0." The answer flagged this transparently rather than silently returning the closest match.
 2. **Walked the typed-claim Facts fence.** The synthesis combined three separate ARR readings on three different dates into a chronological trajectory with growth multipliers between them.
 3. **Cited every claim.** Every number gets a `[companies/acme-co-0]` citation pointing at the source page — no floating numbers.
 
-Across five multi-page relational questions in Cat 29, `gbrain think` averages **5.60/10** vs raw retrieval **1.60/10** — a **+4.00 point** Haiku-judged lift, with think winning 3 of 5 questions. Full receipt + the other four questions: [`docs/benchmarks/2026-05-23-v0.40.6.0-snapshot.md`](https://github.com/garrytan/gbrain-evals/blob/main/docs/benchmarks/2026-05-23-v0.40.6.0-snapshot.md).
+Across five multi-page relational questions in Cat 29, GBrain's synthesis layer averages **5.60/10** vs raw retrieval **1.60/10** — a **+4.00 point** Haiku-judged lift, with the brain layer winning 3 of 5 questions. Full receipt + the other four questions: [`docs/benchmarks/2026-05-23-v0.40.6.0-snapshot.md`](https://github.com/garrytan/gbrain-evals/blob/main/docs/benchmarks/2026-05-23-v0.40.6.0-snapshot.md).
 
 ## Install
 
@@ -86,23 +86,23 @@ gbrain serve --http       # HTTP MCP with OAuth 2.1 + admin dashboard
 
 Per-client guides (Claude Desktop, Code, Cursor, ChatGPT, Perplexity, Cowork) live under [`docs/mcp/`](docs/mcp/). HTTP server supports DCR-style client registration, scope-gated access (`read`/`write`/`admin`), and built-in rate limiting.
 
-## Search vs think
+## Two ways to query your brain
 
-Two ways to query your brain. They are different things.
+Raw retrieval (what most personal-knowledge tools ship) and a synthesis layer that gives you an actual answer. They serve different jobs.
 
 ```bash
-# search: raw pages, fast, no LLM cost
+# raw retrieval: top pages by hybrid score, fast, no LLM cost
 gbrain search "who's working on AI agents at portfolio companies?"
 
-# think: synthesized answer with citations and gap analysis
+# brain layer: synthesized answer with citations and gap analysis
 gbrain think "who's working on AI agents at portfolio companies?"
 ```
 
-`search` returns the top retrieved pages, ranked by hybrid scoring (vector + keyword + RRF + source-tier boost + reranker). Use it when you want raw material to skim: agent context windows, citation lookups, finding a specific quote.
+**`gbrain search`** returns the top retrieved pages, ranked by hybrid scoring (vector + keyword + RRF + source-tier boost + reranker). Use it when you want raw material to skim: agent context windows, citation lookups, finding a specific quote.
 
-`think` runs the same retrieval, then composes a synthesized answer across the results with explicit citations to the source pages AND an honest note on what the brain doesn't know yet. The gap analysis is the differentiator: the answer tells you when a page is stale, when a claim is uncited, when two pages contradict each other, when there's a hole you should fill.
+**`gbrain think`** runs the same retrieval, then composes a synthesized answer across the results with explicit citations to the source pages AND an honest note on what the brain doesn't know yet. The gap analysis is the differentiator: the answer tells you when a page is stale, when a claim is uncited, when two pages contradict each other, when there's a hole you should fill.
 
-**Why it compounds.** Pair `think` with `find_trajectory` and you get answers like *"how have the company's metrics changed AND what does the team look like right now AND what did they promise / share AND when did we last meet AND what's the value-add I can offer here"*: well-scored, well-cited, in one shot. That's the strategic moat. That's why building a 100K-page brain is worth the effort.
+**Why it compounds.** Pair the brain layer with `find_trajectory` and you get answers like *"how have the company's metrics changed AND what does the team look like right now AND what did they promise / share AND when did we last meet AND what's the value-add I can offer here"*: well-scored, well-cited, in one shot. That's the strategic moat. That's why building a 100K-page brain is worth the effort.
 
 `gbrain agent run "..."` exposes the same surface to a sub-agent through the Minions queue, with crash-safe two-phase persistence. Same answers, durable.
 
