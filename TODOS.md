@@ -156,6 +156,70 @@ cleanup can move each into the relevant area section.
   doesn't. (Embedding cluster.)
 
 ---
+## v0.40.10.0 PGLite hang follow-ups (v0.41+)
+
+These were filed when v0.40.10.0 shipped the search/query/get hang fix
+(#1247/#1269/#1290) + WASM init classifier (#1340) + sync breadcrumbs.
+Three items deferred:
+
+- [ ] **Investigate #1342 — `gbrain sync` hangs after schema v89→v92
+  migration (PGLite, single reporter).** Repro shape: ~99% CPU in pure-JS
+  JIT loop per `sample <pid>`, zero stderr output, reproduces with
+  `--dry-run --no-pull`. Triggered after migrations 89→92 landed (v89
+  facts_event_type_column, v90 contextual_retrieval_columns, v91
+  pages_generation_trigger_and_bookmark, v92 sources_github_repo_index).
+  Stale lock recovery from a `brain.pglite.broken-20260523-120636`
+  rename suggests half-applied schema state.
+
+  **Ruled out** (per v0.40.10.0 plan-eng-review): NOT the
+  `withRefreshingLock` heartbeat (user takes the legacy global-lock
+  path — no setInterval); NOT the v91 trigger function (only fires on
+  writes, user repros with `--dry-run`); NOT the two `while (true)`
+  loops in `src/commands/sync.ts` (parallel worker pool + watch mode,
+  neither in the user's invocation path).
+
+  **Next diagnostic steps**:
+  1. Seed a fresh PGLite brain at schema v88 (snapshot the embedded
+     schema blob at that version into a test fixture), apply migrations
+     v89→v92, then run `performSync` with the user's exact flags and
+     an 8s timeout. Repeat with a partial-v91 state (column landed,
+     index didn't) to match the `brain.pglite.broken-...` clue.
+  2. Run the reproducer under `bun --inspect-brk` and grab the V8
+     stack at the spin point.
+  3. Scan for `contextual_retrieval_mode IS NULL` paths in sync /
+     `src/core/import-file.ts` — the v90 column may have an unbounded
+     iteration somewhere when the per-source backfill kicks in.
+
+  **Reporter's config**: PGLite, `~/.gbrain/brain.pglite`,
+  `ollama:nomic-embed-text` @ 768d, macOS 15.5, single 'default'
+  source.
+
+  **Mitigation in v0.40.10.0**: phase breadcrumbs added to
+  `performSyncInner` so the next #1342-shaped report names WHICH phase
+  spun (resolve_repo / load_active_pack / validate_repo_state /
+  detect_head). Doesn't fix; makes reports actionable.
+
+- [ ] **Retrofit `awaitPendingSearchCacheWrites` with the same bounded
+  timeout v0.40.10.0 added to `awaitPendingLastRetrievedWrites`.** The
+  v0.36.1.x #1090 fix at `src/core/search/hybrid.ts:36-45` shipped the
+  drain pattern without a timeout; v0.40.10.0 added the timeout + warn
+  pattern to the new `awaitPendingLastRetrievedWrites` helper. For
+  symmetry (and to close the same future-failure mode in the cache
+  drain), apply the same `Promise.race` + stderr warn pattern. ~15 LOC
+  + 2 unit cases. Pair this with the drain-helper extraction below.
+
+- [ ] **Extract a shared `createDrainHelper<T>()` factory when a third
+  fire-and-forget surface appears.** Per D4 in the v0.40.10.0 eng
+  review: two surfaces is the threshold for noticing, three for
+  extracting. `src/core/search/hybrid.ts:awaitPendingSearchCacheWrites`
+  + `src/core/last-retrieved.ts:awaitPendingLastRetrievedWrites` are
+  the two surfaces today. When a third surface is added (or when the
+  timeout-symmetry retrofit above lands and the duplication becomes
+  load-bearing), extract a `src/core/drain-helper.ts` factory consumed
+  by both call sites. Pair with the symmetry retrofit so they fire
+  together as one focused refactor.
+
+---
 ## v0.40.7.0 Schema Cathedral v3 follow-ups (v0.40.7+)
 
 These were filed when v0.40.7.0 closed PR #1321's design as a production
