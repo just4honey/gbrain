@@ -2,6 +2,120 @@
 
 All notable changes to GBrain will be documented in this file.
 
+## [0.41.3.0] - 2026-05-24
+
+**Pre-register Claude and ChatGPT clients without `--enable-dcr` — the SECURITY.md-recommended setup actually works now.**
+
+If you run `gbrain serve --http` to expose your brain over the network, the safe shape SECURITY.md recommends has always been "leave Dynamic Client Registration off, pre-register every browser-based client by hand." Before this release that path was broken at step one: `gbrain auth register-client` hard-coded no redirect URIs and no auth method, so claude.ai's first probe returned `Unregistered redirect_uri` and the only fix was hand-editing `oauth_clients` rows in psql. v0.41.3 makes the documented path actually usable.
+
+While the SECURITY.md-recommended pre-registration shape was being plumbed, an independent code review found that the live Express OAuth server (`/mcp`, `/token`, `/authorize`, `/register`, `/revoke`) was using default-wide-open `cors()` middleware — every web origin could complete a token exchange from a logged-in operator's browser. That's now closed by default; OAuth endpoints reject all cross-origin requests unless `GBRAIN_HTTP_CORS_ORIGIN` lists the origin explicitly.
+
+### How to use the new shape
+
+Pre-register a confidential client with one paste-ready command:
+
+```bash
+gbrain auth register-client claude-ai \
+  --scopes "read write" \
+  --redirect-uri https://claude.ai/api/mcp/auth_callback \
+  --redirect-uri https://claude.com/api/mcp/auth_callback
+# --grant-types auto-set to authorization_code,refresh_token because --redirect-uri was passed
+```
+
+Pre-register a public PKCE client (ChatGPT custom connector, Claude Code, Cursor) — no client secret minted:
+
+```bash
+gbrain auth register-client chatgpt \
+  --scopes "read write" \
+  --redirect-uri https://chatgpt.com/connector/oauth/<HASH> \
+  --token-endpoint-auth-method none
+```
+
+Then start the server with the CORS allowlist set:
+
+```bash
+GBRAIN_HTTP_CORS_ORIGIN=https://claude.ai gbrain serve --http --port 8787
+# Default reverse-proxy trust is "loopback" (Caddy/Tailscale on same host).
+# Behind Fly.io / Render / Vercel / nginx? Set GBRAIN_HTTP_TRUST_PROXY=1.
+GBRAIN_HTTP_TRUST_PROXY=1 gbrain serve --http --port 8787 --bind 0.0.0.0
+```
+
+### What you get
+
+| Surface | Before | After |
+|---|---|---|
+| `gbrain auth register-client` | hard-coded empty `redirect_uris`, NULL auth method, no public-client option | `--redirect-uri` (repeatable), `--token-endpoint-auth-method`, auto-set `authorization_code,refresh_token` when `--redirect-uri` is passed |
+| Express OAuth endpoints CORS | `cors()` default → `Access-Control-Allow-Origin: *` on /mcp, /token, /authorize, /register, /revoke | default-deny; allowlist via `GBRAIN_HTTP_CORS_ORIGIN`; startup WARN when `--bind 0.0.0.0` is set with no allowlist |
+| Legacy transport CORS preflight | leaked `Allow-Methods` + `Allow-Headers` to every Origin on OPTIONS regardless of allowlist | consolidated `corsHeaders(origin, {preflight})` — both Allow-Origin and Allow-Methods/Headers gated together |
+| Admin endpoint registering public client | INSERT confidential → UPDATE to NULL out `client_secret_hash` (non-atomic; UPDATE failure stranded a confidential row) | single atomic INSERT via `registerClientManual(..., tokenEndpointAuthMethod)` |
+| `token_endpoint_auth_method` validation | accepted any string at admin endpoint; CLI didn't even take the field | `ALLOWED_TOKEN_ENDPOINT_AUTH_METHODS = {client_secret_post, client_secret_basic, none}` enforced at all three registration entry points (CLI, admin, DCR) |
+| Reverse-proxy trust env | hardcoded `'loopback'` in Express; docs claimed "disabled by default" (lie) | `GBRAIN_HTTP_TRUST_PROXY` env: `'loopback'` default, `'1'` for one-hop proxies, `'0'` to disable, numeric for N hops, named modes pass through |
+
+### Things to watch after upgrade
+
+- If you ran with `gbrain serve --http` behind a reverse proxy and a browser-based client (claude.ai, ChatGPT) at the same domain, you'll now need to add that origin to `GBRAIN_HTTP_CORS_ORIGIN`. Same-origin requests (no Origin header) are unaffected.
+- If you had hand-edited `oauth_clients` rows to set `token_endpoint_auth_method = 'frobnicate'` or any other non-allowlist value, those rows continue to function — the validator only gates new writes. To clean up, re-register the client via the CLI (which now mints the right shape atomically).
+- If you set `GBRAIN_HTTP_TRUST_PROXY=1` previously on the legacy bearer transport, that env var now also drives the Express OAuth server. Same value, same semantics — but the doc disagreement is gone.
+
+### Itemized changes
+
+#### Added
+
+- `gbrain auth register-client --redirect-uri <uri>` (repeatable) — pre-register a client with one or more callback URLs. When passed without `--grant-types`, defaults to `authorization_code,refresh_token`.
+- `gbrain auth register-client --token-endpoint-auth-method <method>` — `client_secret_post` (default), `client_secret_basic`, or `none` (public PKCE-only client; no client secret minted).
+- `ALLOWED_TOKEN_ENDPOINT_AUTH_METHODS` constant + `validateTokenEndpointAuthMethod()` validator exported from `src/core/oauth-provider.ts`. Single source of truth gated at all three registration entry points (CLI, admin endpoint, DCR `/register`). Closes the `--enable-dcr` loose-path hole where DCR previously skipped allowlist validation.
+- `GBRAIN_HTTP_TRUST_PROXY` env var on the Express OAuth server (`src/commands/serve-http.ts`). Maps `'loopback'` (default), `'0'`/`'false'` (trust nothing), `'1'`/`'true'` (one hop), other numeric (N hops), other strings pass-through to Express named modes / CIDR lists. Pure `resolveTrustProxy()` helper exported for testability.
+- `parseCorsAllowlistOAuth()` + `resolveCorsOrigin()` helpers in `src/commands/serve-http.ts`. The cors middleware on OAuth endpoints now uses `cors({ origin: resolveCorsOrigin(allowlist) })` — default-deny when `GBRAIN_HTTP_CORS_ORIGIN` is unset, function-form check when set.
+- Startup stderr WARN when `--bind 0.0.0.0` is set without `GBRAIN_HTTP_CORS_ORIGIN`. Surfaces the default-deny posture before the first cross-origin request.
+- 48-case `test/serve-http-trust-proxy.test.ts` + `test/serve-http-cors.test.ts` + `test/auth-register-client-args.test.ts` (new) plus 18 new cases in `test/oauth.test.ts` and 4 new IRON RULE CORS preflight regressions in `test/http-transport.test.ts`. 183 directly-touched tests, all green.
+
+#### Changed
+
+- `registerClientManual()` signature extends with `tokenEndpointAuthMethod?: string` parameter. Return type widens from `{clientId, clientSecret}` to `{clientId, clientSecret?}` because public clients (`'none'`) don't mint a secret. Atomic single INSERT for the public-client case — no more INSERT-then-UPDATE race.
+- `corsHeaders()` and `corsPreflightHeaders()` in `src/mcp/http-transport.ts` consolidated into one `corsHeaders(origin, {preflight: boolean})`. Methods/Headers only emit when `preflight === true AND origin in allowlist`. Closes the asymmetry where the OPTIONS handler leaked surface to non-allowlisted origins.
+- Admin endpoint `POST /admin/api/register-client` validates `tokenEndpointAuthMethod` via shared validator before calling `registerClientManual`. The post-insert UPDATE block that NULL'd `client_secret_hash` for `'none'` clients is gone; the atomic INSERT does it directly.
+- CLI argv parser at `src/commands/auth.ts:registerClient` rewritten from `indexOf`-based lookahead to a proper loop. Pre-fix the parser only honored the FIRST occurrence of any flag, so `--redirect-uri A --redirect-uri B` silently dropped B.
+- `SECURITY.md` "If you must use a custom HTTP wrapper" section gains a "Pre-registering claude.ai / ChatGPT clients without DCR" subsection with paste-ready commands. "CORS" section documents the v0.41.3 OAuth endpoint lockdown. "Reverse-proxy trust" rewritten to match reality — was claiming "disabled by default" while Express hardcoded `'loopback'`; now documents the `GBRAIN_HTTP_TRUST_PROXY` env contract honestly.
+
+#### Fixed
+
+- Admin endpoint atomicity bug (codex F4): pre-v0.41.3 the registration handler did `INSERT (confidential) → UPDATE (NULL out secret_hash)` for `tokenEndpointAuthMethod === 'none'`. If the UPDATE failed mid-flight (timeout, network), a confidential row with a real client_secret stranded — the agent thought it was registering a public client, but operators ended up with a confidential one. Single atomic INSERT now.
+- DCR validator gate (codex F5): pre-v0.41.3 the `--enable-dcr` `/register` path defaulted unknown `token_endpoint_auth_method` values to `'client_secret_post'`, silently swallowing typos. The shared validator now fires on the DCR path too — closes the "DCR was the loosest entry point" hole.
+- `client_secret_basic` admitted in the allowed set (codex F3): server supports HTTP Basic confidential client auth at `/token` (`src/commands/serve-http.ts:468`) but a narrower allowlist would have rejected it. The allowlist is exactly `{client_secret_post, client_secret_basic, none}` — the three methods the SDK's `mcpAuthRouter` advertises.
+- Wide-open `cors()` on every OAuth endpoint (codex F1, the biggest finding): pre-v0.41.3 the live Express server at `src/commands/serve-http.ts:400-404` ran `app.use('/mcp', cors())` (and same for /token, /authorize, /register, /revoke) with no allowlist. `cors()` defaults to `Access-Control-Allow-Origin: *`. Any web origin could complete a full OAuth flow from a logged-in operator's browser. Closed by default; explicit allowlist required.
+- Reverse-proxy doc disagreement (codex F7): docs at `SECURITY.md:127` said "Disabled by default" while `src/commands/serve-http.ts:390` hardcoded `app.set('trust proxy', 'loopback')`. Docs now match implementation.
+
+### For contributors
+
+- Three new TODOS filed in `TODOS.md` under "v0.41.3 security/MCP fix wave follow-ups": T13a (extract deny-by-default fine-grained scope wiring from PR #1316), T13b (extract real operation names in mcp_request_log from #1316), T13c (extract `access_tokens.last_used_at` LRU debounce from #1316). PR #1316's RLS posture rewrite is deliberately not filed — it changes the v0.26.7 auto-RLS event trigger that `gbrain doctor`'s `rls_event_trigger` check treats as load-bearing and needs its own plan-eng-review.
+- Community PRs closed as superseded (work either already in master or covered by this wave): #685 (chipoto69), #876 (toilalesondev), #1076 (lukejduncan), #1077 (lukejduncan), #620 (ArshyaAI). Status comment left on open PR #1316 (chipoto69) pointing at the three TODOS.
+- 4 IRON RULE regression tests added at `test/http-transport.test.ts` pin the consolidated `corsHeaders` matrix (preflight × allowlisted/non-allowlisted) so the CORS asymmetry bug class can't return silently. The fix-wave-structural assertion was updated to assert the NEW atomic admin endpoint shape; a regression guard pins that the post-insert UPDATE pattern is gone.
+
+## To take advantage of v0.41.3.0
+
+`gbrain upgrade` should do this automatically. There is no schema migration in this release; the changes are all in code + docs.
+
+1. **Re-register browser-based clients with the new CLI flags:**
+   ```bash
+   gbrain auth register-client claude-ai \
+     --scopes "read write" \
+     --redirect-uri https://claude.ai/api/mcp/auth_callback \
+     --redirect-uri https://claude.com/api/mcp/auth_callback
+   ```
+   (You can leave existing manually-edited `oauth_clients` rows in place; the validator only gates new writes.)
+
+2. **Set `GBRAIN_HTTP_CORS_ORIGIN` if browser clients hit OAuth endpoints from a different origin.** Most setups (Claude Desktop, Cursor) don't need this; ChatGPT custom connector + claude.ai web flows do.
+
+3. **Verify the new posture:**
+   ```bash
+   curl -i -H "Origin: https://evil.example" -X OPTIONS http://localhost:8787/mcp
+   # Expected: NO Access-Control-Allow-Methods header (was leaking pre-v0.41.3)
+   curl -i -H "Origin: https://claude.ai" -X OPTIONS http://localhost:8787/mcp
+   # Expected: has Access-Control-Allow-Methods + Access-Control-Allow-Origin (when allowlisted)
+   ```
+
+4. **If something looks off,** please file an issue: https://github.com/garrytan/gbrain/issues with the output of `gbrain doctor` and which OAuth client + flow broke.
+
 ## [0.41.0.0] - 2026-05-24
 
 **Your 100-job subagent batch now actually completes.** A real user ran `gbrain jobs work --concurrency 10` against an Azure-hosted Anthropic endpoint, submitted 100 background jobs, and watched every single one dead-letter with `rate lease "anthropic:messages" full (8/8)`. The default cap of 8 starved 2 workers; every starved job got marked as a failure, hit `max_attempts = 3` after 3 lease-full bounces, and dead-lettered. This release turns minions from "a CLI you drive" into "a fleet you supervise" — submit a batch, walk away, come back to completed work.
