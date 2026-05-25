@@ -33,6 +33,126 @@ No manual action needed. If you already ran `gbrain ze-switch` on a brain with i
 ### For contributors
 
 PR #1443 was incorporated through the standard fix-wave workflow: the original fork PR from `@garrytan-agents` was cherry-picked into a base-repo branch (fork PRs from non-collaborator accounts do not inherit base-repo CI secrets), eng-reviewed via `/plan-eng-review`, and the partial-WHERE-clause + schema-qualified-probe corrections were bundled into the same ship to keep the change atomic and bisect-friendly. The original PR is closed; attribution is preserved in the commit trailer.
+## [0.41.11.0] - 2026-05-25
+
+**Long chat threads stop swallowing your search results.** If you've imported a multi-year iMessage thread or a Slack archive, you've probably hit this: you search for a specific thing you know was said, the page exists in your brain, but the chunk that contains the literal answer never surfaces. Vector search chunks the conversation into ~300-word blocks, and a chunk that reads only "Locker 93 code 9494" has no topical anchor to "cabin" or "mountain" — the trip context was established 50,000 messages earlier. The chunk embedding has nothing to bind to. The page is there. The answer is there. Retrieval still misses.
+
+`gbrain extract-conversation-facts` walks long-form conversation pages, splits them into 30-minute time-windowed segments, prepends each segment with a topical/temporal header ("Conversation between Alice and Bob from <date1> to <date2>"), and runs them through the same fact extractor your real-time turns already use. The resulting facts land in the facts table — which retrieval already blends into search results — with the anchor terms the chunk-level embedding can't represent. The page surfaces again.
+
+## How to use it
+
+```bash
+# Preview what would happen, no cost, no writes.
+gbrain extract-conversation-facts --dry-run
+
+# Run the backfill with a $5 cap on the first pass.
+gbrain extract-conversation-facts --max-cost-usd 5
+
+# Submit as a background Minion job so you can keep working.
+gbrain extract-conversation-facts --background --max-cost-usd 5
+# prints job_id=123; then:
+gbrain jobs follow 123
+
+# Get a cost estimate for one source before running.
+gbrain sources audit default --json | jq '.facts_backfill_estimate'
+```
+
+A new cycle phase `conversation_facts_backfill` drains the backlog automatically once enabled. It's OFF by default so existing brains don't get a surprise bill on the next autopilot tick:
+
+```bash
+gbrain config set cycle.conversation_facts_backfill.enabled true
+```
+
+`gbrain doctor` gains a `conversation_facts_backlog` check that's quiet for users who haven't enabled the feature (no opt-out noise debt). For users who have enabled it, the check warns when more than 10 eligible pages lack extraction and emits a paste-ready remediation step that `gbrain doctor --remediate` can run for you.
+
+## What you'd see in a concrete example
+
+Take a 4-year iMessage thread with the message "Locker 93 code 9494" buried in segment 47 of 200. The surrounding messages in that segment are unrelated chitchat — no mention of "cabin", "mountain", or "lockbox". The trip planning happened in segment 12.
+
+| Surface | Pre-extraction | Post-extraction |
+|---|---|---|
+| Search "mountain cabin lockbox code" | Returns segment 12's chunks (anchor match) — answer not in them | Returns the extracted fact: "Alice told Bob the mountain cabin lockbox code is 9494 in locker 93" |
+| Page surfaces in results | Yes (via segment 12) | Yes (via the fact row) |
+| Literal answer reachable | No — buried in a topically-blank chunk | Yes — anchor-rich fact text contains "9494" |
+
+The recall miss class survives any chunker change. Until conversations get a fundamentally different chunker (out of scope), the facts table is the right surface for cross-segment anchor-rich retrieval.
+
+## Things to watch
+
+- **Cost.** Default cap is $5 per run. The cycle phase has both per-source ($1) and brain-wide ($5) ceilings, plus per-source (20 min) and brain-wide (30 min) walltime caps. A 10-source brain can't quietly spend 10× its config. Override either with `--max-cost-usd` or via the config keys under `cycle.conversation_facts_backfill.*`.
+- **Memory.** Pages over 25MB are skipped with a stderr warning and surface in `gbrain doctor`'s backlog details. Streaming for 50MB+ histories is a v0.42+ follow-up.
+- **Honors the kill-switch.** If you previously ran `gbrain config set facts.extraction_enabled false`, this command refuses by default. Add `--override-disabled` if you want to force-run for one invocation.
+- **Doctor visibility.** Run `gbrain doctor --json | jq '.checks[] | select(.name=="conversation_facts_backlog")'` to see what's pending.
+
+### What we caught and fixed before merging
+
+This wave went through CEO scope review, three rounds of spec review, two rounds of Codex outside voice grounding the plan against actual code, and two passes of eng review. Together they caught 14 load-bearing issues that would have shipped silent bugs:
+
+- The original test would have passed even if the bug was unfixed (it embedded the answer in the target message). Redesigned to require facts-as-context for the top-1 result.
+- The plan stored object rows in `op_checkpoints`, which only round-trips string arrays AND is garbage-collected after 7 days. Switched to a page-level terminal audit row in the facts table itself as the durable extraction marker.
+- The `insertFacts` unique index is `(source_id, source_markdown_slug, row_num)`. A per-segment row_num would collide on segment 2. Replaced with a page-global accumulator.
+- The doctor backlog query lacked a `source_id` predicate. A page with the same slug in two sources would have falsely shown OK if either was extracted. Cross-source safety added.
+- Nested `withBudgetTracker` REPLACES not stacks. The cycle phase now creates the brain-wide tracker once and passes it explicitly into per-source invocations so the core doesn't auto-wrap-and-replace it.
+- The post-sync backstop uses hardcoded `ELIGIBLE_TYPES`, not pack `extractable`. The original concept-grandfather migration was solving a phantom; dropped. The schema pack still flips `concept.extractable: true` semantically but it doesn't bill anyone.
+
+## Schema migration
+
+One new migration: v94 adds a partial index on `facts(source_id, source_session) WHERE source LIKE 'cli:extract-conversation-facts%'` so the doctor backlog query runs in milliseconds on brains with millions of fact rows. Follows the v14 precedent: `transaction: false` + invalid-index pre-drop on Postgres, plain CREATE INDEX on PGLite.
+
+## To take advantage of v0.41.11.0
+
+`gbrain upgrade` handles the binary + schema migration. After that:
+
+1. **Estimate cost before running** (optional but recommended):
+   ```bash
+   gbrain sources audit default --json | jq '.facts_backfill_estimate'
+   ```
+2. **Run the backfill once** to seed the facts table:
+   ```bash
+   gbrain extract-conversation-facts --background --max-cost-usd 5
+   gbrain jobs follow <printed-job-id>
+   ```
+3. **Verify with doctor**:
+   ```bash
+   gbrain doctor --json | jq '.checks[] | select(.name=="conversation_facts_backlog")'
+   ```
+4. **(Optional) Enable the autopilot cycle phase** so the backlog drains continuously:
+   ```bash
+   gbrain config set cycle.conversation_facts_backfill.enabled true
+   ```
+
+If you see unexpected behavior or the doctor check stays in WARN after a run, file an issue at https://github.com/garrytan/gbrain/issues with `gbrain doctor --json` output.
+
+### Itemized changes
+
+**Bug fixes (from PR #1406 + this wave's hardening):**
+- Conversation page body reads now cover both `compiled_truth` AND `timeline` columns. iMessage and meeting-transcript importers commonly put the chronological message stream in `timeline`; PR #1406's `compiled_truth ?? ''` would have silently dropped half the messages on those importer shapes.
+- Segment text cap tuned to 6500 chars + 30 messages (from 7500/50) so dense Slack/email segments don't silently truncate against `extract.ts`'s `MAX_TURN_TEXT_CHARS=8000` ceiling.
+
+**New CLI command:**
+- `gbrain extract-conversation-facts [--source-id ID] [--types LIST] [--slug SLUG] [--dry-run] [--limit N] [--since ISO] [--force] [--sleep MS] [--segment-limit N] [--max-cost-usd FLOAT] [--background] [--override-disabled] [--yes]`
+
+**New cycle phase:**
+- `conversation_facts_backfill` (default OFF; opt-in via config). 5 config keys: `enabled`, `max_cost_usd`, `max_total_cost_usd`, `max_walltime_min`, `max_total_walltime_min`, `types`. Brain-wide cost AND walltime ceilings; per-source caps inside each.
+
+**New Minion handler:**
+- `extract-conversation-facts` (NOT in `PROTECTED_JOB_NAMES`; per-call cost bounded by `data.max_cost_usd`). `BudgetExhausted` mid-job → job marked completed with `result.budget_exhausted: true` and `result.spent_usd`, NOT a failure.
+
+**Doctor check:**
+- `conversation_facts_backlog` (3-state: SKIPPED when disabled, OK when caught up, WARN when backlog > 10). Emits remediation on WARN for `gbrain doctor --remediate`.
+
+**Sources audit extension:**
+- `gbrain sources audit <id>` now reports `facts_backfill_estimate: {pages, est_segments, est_cost_usd, types}` per source.
+
+**Schema-pack changes:**
+- `gbrain-base.yaml`: added `conversation` (temporal, extractable) and `atom` (annotation, NOT extractable — atoms ARE the extracted form). Flipped `concept.extractable: true` semantically (cosmetic on backstop path today; documents that concept bodies ARE knowledge).
+- `gbrain-recommended.yaml`: removed duplicate `conversation` (now inherits via `extends: gbrain-base`).
+- `src/core/types.ts:ALL_PAGE_TYPES`: extended with `conversation` and `atom`.
+
+**Schema migration:**
+- v94: partial index on `facts(source_id, source_session) WHERE source LIKE 'cli:extract-conversation-facts%'`. Postgres CONCURRENTLY + invalid-index pre-drop (v14 precedent); PGLite plain CREATE INDEX.
+
+**Credits:** Original PR #1406 by @garrytan-agents. The hardening wave absorbed 5 critical Codex findings (round 1), 4 architectural issues (eng pass 1), and 9 more code-grounded findings (Codex round 2 + eng pass 2). All preserved via `Co-Authored-By` on the replacement commit.
 
 ## [0.41.10.1] - 2026-05-25
 
