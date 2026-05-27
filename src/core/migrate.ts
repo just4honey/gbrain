@@ -4780,14 +4780,56 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: 105,
+    name: 'slug_aliases',
+    // v0.41.22 type-unification wave (T1, plan D1+D11+D17).
+    // Backing table for the concept-redirect → alias-table migration: 5.5K
+    // concept-redirect pages in the reference production brain become rows
+    // here so wikilinks like `[[old-redirect-slug]]` resolve to the canonical
+    // page via `engine.resolveSlugWithAlias` short-circuit. Source-scoped
+    // unique key + source-scoped canonical index per F12 (dangling_aliases
+    // doctor check must use source-scoped JOIN to avoid cross-source false
+    // positives).
+    //
+    // Originally claimed v104; bumped to v105 after master merge from
+    // v0.41.21.0 wave took v104 for pages_atom_source_hash_idx.
+    //
+    // CHECK no-self-reference + UNIQUE (source_id, alias_slug). PGLite uses
+    // plain CREATE INDEX (no CONCURRENTLY); fresh installs also create the
+    // table via PGLITE_SCHEMA_SQL so this migration is a no-op there.
+    sql: '',
+    handler: async (engine) => {
+      await engine.runMigration(
+        105,
+        `CREATE TABLE IF NOT EXISTS slug_aliases (
+          id             BIGSERIAL PRIMARY KEY,
+          source_id      TEXT NOT NULL,
+          alias_slug     TEXT NOT NULL,
+          canonical_slug TEXT NOT NULL,
+          notes          TEXT,
+          created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+          CONSTRAINT slug_aliases_no_self CHECK (alias_slug <> canonical_slug),
+          CONSTRAINT slug_aliases_uniq UNIQUE (source_id, alias_slug)
+        );`
+      );
+      await engine.runMigration(
+        105,
+        `CREATE INDEX IF NOT EXISTS slug_aliases_canonical_idx
+           ON slug_aliases (source_id, canonical_slug);`
+      );
+    },
+  },
+  {
+    version: 106,
     name: 'page_generation_clock_and_statement_trigger',
-    // v0.41.22.0 (D18/D19, codex outside-voice on /plan-eng-review): global
+    // v0.41.23.0 (D18/D19, codex outside-voice on /plan-eng-review): global
     // page-generation clock + statement-level trigger.
     //
-    // Renumbered v104 → v105 during master merge: PR #1545 took v104 for
-    // pages_atom_source_hash_idx ahead of this PR landing.
+    // Renumbered v104 → v105 → v106 during master merges: PR #1545 (master's
+    // v0.41.21.0 ops-fix-wave) took v104 for pages_atom_source_hash_idx;
+    // PR #1542 (master's v0.41.22.0 type-unification cathedral) took v105
+    // for slug_aliases ahead of this PR landing.
     //
-    // Why this exists: the pre-v0.41.22.0 query-cache Layer 1 bookmark read
+    // Why this exists: the pre-v0.41.23.0 query-cache Layer 1 bookmark read
     // `MAX(generation) FROM pages` to detect "writes happened since cache
     // store". Two bugs in that contract — independent of any sync work:
     //
@@ -4815,7 +4857,7 @@ export const MIGRATIONS: Migration[] = [
     //
     // Mirror lives in src/core/pglite-schema.ts (fresh-install path).
     // Forward-reference bootstrap probe in applyForwardReferenceBootstrap
-    // on both engines so pre-v0.41.22.0 brains pick it up cleanly.
+    // on both engines so pre-v0.41.23.0 brains pick it up cleanly.
     idempotent: true,
     sql: `
       CREATE TABLE IF NOT EXISTS page_generation_clock (

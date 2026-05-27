@@ -2,7 +2,7 @@
 
 All notable changes to GBrain will be documented in this file.
 
-## [0.41.22.0] - 2026-05-27
+## [0.41.23.0] - 2026-05-27
 
 **Big-delete syncs no longer choke your brain — and your search results
 were silently going stale in a different way that's now fixed.**
@@ -96,7 +96,7 @@ a brain-wide MAX scan.
   500). Per-row `pages.generation` stays for Layer 2's per-page
   snapshot semantics; only Layer 1's read source changed. Empty-result
   cache rows now trust Layer 1 exclusively.
-- **Migration v105** (`page_generation_clock_and_statement_trigger`)
+- **Migration v106** (`page_generation_clock_and_statement_trigger`)
   creates the clock table, seeds it with `COALESCE(MAX(pages.generation), 0)`
   so existing cache rows aren't all instantly invalidated, and wires
   the new trigger.
@@ -137,6 +137,303 @@ a brain-wide MAX scan.
 - v0.42+ TODO: heavy regression test for two concurrent batch DELETEs
   against disjoint sources (the statement-level clock-row UPDATE
   contention shape). Filed under `tests/heavy/` per CLAUDE.md.
+
+## [0.41.22.1] - 2026-05-27
+
+**Your `gbrain brainstorm` and `gbrain lsd` calls now actually score the ideas they generate.**
+
+Since the calibration cold-start landed, every brainstorm or LSD run was
+quietly returning `judge_failed: true` and saving the ideas with no
+scores. You'd ask for 72 ideas, get 72 unscored entries, and have no
+way to tell which ones the judge would have called good. v0.41.22.1
+closes the two bugs that caused it. On the same 72-idea fixture that
+scored 0/72 before, you'll now see ~39/72 passing — real judgment, not
+silence.
+
+The same patch closes a second silent bug: pricing lookup missed
+slash-form model ids. If you ran `gbrain brainstorm --judge-model
+anthropic/claude-sonnet-4-6 --max-cost 5` (slash, the form CLI flags
+accept and OpenRouter recipes emit), the BudgetTracker refused to
+start because the pricing table only matched the colon-prefix form
+`anthropic:claude-...`. Now both forms work the same.
+
+**How to turn it on:** Nothing to do. `gbrain upgrade` is all you need.
+No schema migration, no config change.
+
+**What you'd see in a concrete example:**
+
+| Command | Pre-fix | Post-fix |
+|---|---|---|
+| `gbrain brainstorm "topic" --max-cost 5` | judge_failed, 0/72 ideas scored | summary table with ~39/72 passing |
+| `gbrain brainstorm ... --judge-model anthropic/claude-sonnet-4-6 --max-cost 5` | `BudgetExhausted reason=no_pricing` | runs to completion, cost tracked |
+| `gbrain lsd ... --judge-model anthropic:claude-sonnet-4-6 --max-cost 5` | works both pre + post (colon form) | works both pre + post |
+
+**The fix in one paragraph.** Two bugs lived in the same release. Bug
+1: the judge hard-coded `maxTokens: 4000` while emitting ~100 tokens
+per idea, so any chunk past ~40 ideas got truncated mid-JSON and the
+parser threw. Bug 2: every pricing lookup site (5 of them across the
+codebase) re-implemented an inline `provider:model` split, and none of
+them handled `provider/model` (slash). Three reviews refound the slash
+bug in three separate places. The fix: one shared `parseModelId`
+helper that 5 sites now route through, plus a maxTokens formula that
+scales with idea count and respects each model's actual output cap.
+
+**A subagent-guard bug fixed in the same wave.** The v0.31.12 subagent
+runtime guard (`isAnthropicProvider`) only handled the colon form too.
+If anyone had configured their subagent tier as
+`anthropic/claude-sonnet-4-6` (slash), the guard would have silently
+returned false, and the subagent loop would have fallen back to
+TIER_DEFAULTS instead of honoring the explicit config. The same
+centralizer closes this bypass.
+
+**What's safe to know about.** This is pure-function refactoring + a
+new constant. No schema change, no DB plane impact, no behavioral
+change for existing colon-form or bare model ids. Brainstorm runs at
+larger judge maxTokens budgets will see somewhat longer Anthropic API
+latency (the call now actually completes instead of truncating). The
+trade is slower-but-correct vs faster-but-broken.
+
+**What we caught and fixed before merging.** Adversarial review caught
+four real issues that landed in the shipped version:
+
+1. The original "32K maxTokens cap, applied uniformly" was unsafe for
+   legacy Claude 3.5 models whose output cap is 8,192. The shipped
+   version uses a per-model cap map (`ANTHROPIC_OUTPUT_CAPS`) so legacy
+   models bind at 8K and modern 4-series at 32K or 64K.
+2. The `splitProviderModelId` defensive contract should be in the type
+   signature, not just in tests — the shipped signature is
+   `splitProviderModelId(input: string | null | undefined)`.
+3. The pricing-side fix would let BudgetTracker pass for slash-form ids,
+   but `gateway.chat()` would then throw via the OLDER gateway-side
+   `parseModelId` (in `src/core/ai/model-resolver.ts`). The shipped
+   version also relaxes the gateway resolver to accept slash form,
+   closing the bug class end-to-end. Bare names without ANY separator
+   still throw — gateway routing always needs an explicit provider.
+4. The maxTokens cap was looking at `modelOverride` (caller-passed) but
+   ignoring the gateway's actual configured chat model — so an
+   `undefined` override fell back to 32K even if the configured default
+   was a legacy 8K model. The shipped version routes through the
+   gateway's `getChatModel()` so the cap matches what `chat()` will
+   actually use.
+
+The in-project name collision between my new
+`src/core/model-id.ts:parseModelId` and the existing gateway-side
+`src/core/ai/model-resolver.ts:parseModelId` was killed by renaming
+the new helper to `splitProviderModelId`. Both functions now accept
+the same input shapes; they differ only in how they handle bare names
+(`splitProviderModelId` returns `{provider: null, model: 'bare'}`;
+the gateway one throws because routing needs an explicit provider).
+
+Thanks to `@garrytan-agents` whose original bug report (PR #1540,
+since closed as superseded by this wave) drove the whole investigation
+and provided the first-pass diff for the two most visible sites.
+
+### Itemized changes
+
+- **`src/core/model-id.ts` (NEW)** — `splitProviderModelId(input): {provider, model}` shared parser for the pricing side. Splits on `:` first, then `/`. Defensive contract: null/undefined/empty/whitespace returns `{provider: null, model: ''}`. Pinned by 16 cases in `test/model-id.test.ts`.
+- **`src/core/ai/model-resolver.ts`** — gateway-side `parseModelId` extended to also accept slash form (`anthropic/claude-sonnet-4-6`). Pre-fix the colon-only check threw at every gateway entry point (chat / embed / rerank) so even with the pricing fix, slash-form judge models would still fail mid-judge. Bare names without ANY separator still throw — gateway routing always needs an explicit provider. New test file `test/ai/model-resolver-slash.test.ts` (10 cases including a resolveRecipe round-trip pinning slash form resolves to the same recipe as colon form).
+- **`src/core/anthropic-pricing.ts`** — `estimateMaxCostUsd` routes through `splitProviderModelId`. Now handles slash-form ids that previously returned null. New test file `test/anthropic-pricing.test.ts` (7 cases including a structural regression guard that every key in `ANTHROPIC_PRICING` is reachable via bare + colon + slash).
+- **`src/core/budget/budget-tracker.ts`** — `lookupPricing` routes through `splitProviderModelId`. Closes the `BudgetExhausted reason=no_pricing` hard-fail on `--max-cost N` + `--judge-model anthropic/claude-...` (the headline brainstorm bug). 2 new cases in the existing budget-tracker test.
+- **`src/core/eval-contradictions/cost-tracker.ts`** — `pricingFor` routes through `splitProviderModelId`. The duplicate ANTHROPIC_PRICING table (consolidation deferred to follow-up TODO) now correctly bills colon and slash forms of Sonnet/Opus instead of silently falling back to Haiku pricing. New test file `test/eval-contradictions/cost-tracker-slash.test.ts` (6 cases including a legacy-behavior pin for the unknown-model silent-Haiku fallback).
+- **`src/core/minions/batch-projection.ts`** — deleted the 3-line inline `bareModel` helper; inlined `splitProviderModelId(model).model` at both call sites. Existing `test/batch-projection.test.ts` extended with slash-form + double-separator cases.
+- **`src/core/model-config.ts:isAnthropicProvider`** — routes through `splitProviderModelId`. **Silently fixed a v0.31.12 subagent-guard bypass:** slash-form Anthropic ids (`anthropic/claude-sonnet-4-6`) now correctly classify as Anthropic, so the subagent loop honors them instead of falling back to TIER_DEFAULTS. 2 new cases in `test/model-config.serial.test.ts`.
+- **`src/core/brainstorm/judges.ts`** — `maxTokens: 4000` replaced with `computeJudgeMaxTokens(ideaCount, modelId)`. Named constants `TOKEN_BUDGET_PER_IDEA`, `TOKEN_BUDGET_ENVELOPE`, `LEGACY_MIN_MAX_TOKENS`, `MAX_OUTPUT_TOKENS_CEIL` extracted at top of file with per-constant comment. New `ANTHROPIC_OUTPUT_CAPS` map per-model output ceilings (Opus 4.7 = 32K, Sonnet 4.6 / Haiku 4.5 = 64K, legacy 3.5 = 8K). When the caller passes no `modelOverride`, the cap routes through the gateway's actual configured chat model via `getChatModel()` so the formula matches what `chat()` will use, not whatever the override hints at. Pinned by 16 cases in `test/brainstorm/judges-maxtokens.test.ts`.
+
+### For contributors
+
+Three follow-up TODOs filed in `TODOS.md` from the v0.41.22.1 plan review:
+
+- Config-write normalization (canonicalize provider IDs to `:` form on config write)
+- Non-Anthropic pricing tables (OpenAI / Gemini / OpenRouter)
+- Eval-contradictions duplicate ANTHROPIC_PRICING table consolidation
+
+The first two are v0.42+ scope. The third is deferred from this wave per the explicit Step 0 scope decision (cleanup-the-pricing-system would double the blast radius of a brainstorm fix).
+
+## To take advantage of v0.41.22.1
+
+`gbrain upgrade` is all you need. No schema migration, no config change.
+
+**Verify the fix worked:**
+
+```bash
+# Pre-fix this would silently exit with judge_failed in the report:
+gbrain brainstorm "what should I work on next" --max-cost 1
+# Look for: "passing N/M ideas" in the summary — should be > 0
+
+# Pre-fix this would refuse to start with BudgetExhausted no_pricing:
+gbrain brainstorm "topic" --judge-model anthropic/claude-sonnet-4-6 --max-cost 1
+# Should run to completion and print a scored idea list
+```
+
+If `gbrain brainstorm` still hits `judge_failed` after upgrading, file an issue at https://github.com/garrytan/gbrain/issues with the output of `gbrain --version` and the brainstorm command you ran. The fix is structural; failure post-upgrade indicates the fix didn't land properly.
+
+## [0.41.22.0] - 2026-05-27
+
+**Your brain runs on a real taxonomy now. Not 94 types of cruft. Fifteen
+canonical types you can name, plus a catch-all for the long tail.**
+
+A real production brain (186K pages) had accreted **94 distinct
+`pages.type` values** in 9 clusters of redundancy: tweet / tweet-thread
+/ tweet-bundle / tweet-single all coexisting, 5.5K concept-redirect
+pages bloating orphan counts, atom-partner-link pages that should be
+real link rows, company / yc-company / product / organization all
+fighting for the same idea. The type system is the foundation for
+schema packs, search filtering, extract behavior, enrichment routing,
+and expert routing. When types are noisy, every downstream feature
+degrades.
+
+This release ships the cathedral that collapses 94 → 14 canonical types
+(plus `note` as the catch-all = 15 total) on any brain that opts in.
+Run `gbrain onboard --check --explain` and see exactly which pages
+would move where. Run `gbrain jobs submit unify-types --allow-protected
+--params '{"target_pack":"gbrain-base-v2"}'` and the migration runs
+end-to-end: retypes pages, creates alias rows, converts edge-shaped
+pages into real link rows, then flips the active pack. Reversible via
+72h soft-delete TTL on alias/link pages + `frontmatter.legacy_type`
+preservation on retyped pages.
+
+What you can do that you couldn't before:
+
+- `gbrain init` now defaults to `gbrain-base-v2` (15 canonical types).
+  Override with `--schema-pack gbrain-base` for the legacy 24-type pack.
+  Banner prints the active pack on init so the choice is visible.
+- `gbrain onboard --check` surfaces THREE new checks alongside the
+  v0.41.18 four: `pack_upgrade_available` (your brain is on a pack with
+  a declared successor), `type_proliferation` (pack-aware ratio:
+  declared+5 warn, declared×2 fail — no false positives on custom
+  packs), `dangling_aliases` (source-scoped JOIN; no cross-source false
+  positives per codex F12).
+- `gbrain onboard --check --explain` runs the unify-types handler in
+  dry-run mode and prints the per-cluster narrative: how many pages
+  would retype, how many edge pages would convert to links, how many
+  redirects would become aliases. Trust UX delta vs a blob diff.
+- `gbrain jobs submit unify-types --allow-protected --params
+  '{"target_pack":"gbrain-base-v2"}'` runs the migration. PROTECTED
+  Minion handler — autopilot will NOT auto-fire it. Manual_only by
+  design (D17: taxonomy is user judgment).
+- Wikilinks like `[[old-redirect-slug]]` keep working after the
+  migration via `engine.resolveSlugWithAlias` short-circuit. The
+  slug_aliases table IS the resolver (D15: codex outside voice — don't
+  rewrite body text; the alias table is the right primitive).
+- Search ranking gains an `alias_resolved_boost` (1.05x) stage that
+  fires when a result's slug is a canonical of one or more aliases.
+  Lets canonicals outrank fuzzy matches that hit aliases by accident.
+
+The mapping_rules system makes the migration declarative:
+- `retype: from_type → to_type with subtype` retypes pages and stamps
+  `frontmatter.subtype` (plus always `frontmatter.legacy_type` for
+  rollback per D8). Strict allowlist on subtype_field
+  (`{subtype, legacy_type, origin, format, kind, period, domain}`)
+  prevents third-party packs from injecting `title` or `slug` via
+  mapping_rules (codex D9 security hardening).
+- `page_to_link: from_type → links table row` converts edge-shaped
+  pages (atom-partner-link, symlink) into real link rows.
+- `page_to_alias: from_type → slug_aliases row` converts redirect
+  pages into authoritative pointers.
+- Catch-all sentinel (`from_type: '*unknown*'`) retypes any page whose
+  type isn't covered by an explicit rule AND isn't a page_to_link /
+  page_to_alias source. Preserves the original type as
+  `frontmatter.legacy_type`. Guarantees ≤16 distinct types post-unify
+  on ANY brain (D12).
+
+Architecture story for engineers: this plugs into the v0.41.18.0
+`gbrain onboard` cathedral as migration #6. NO new orchestrator — the
+3 new doctor checks emit `RemediationStep[]` consumed by
+`runAllOnboardChecks`, and the `unify-types` PROTECTED Minion handler
+runs the migration with the same op_checkpoint + db-lock primitives
+the other handlers use. The original plan had a parallel `gbrain
+schema unify` orchestrator; codex outside voice caught it as
+rebuilding the same cathedral under a new name. Replaced with a
+~180-LOC handler + 3 onboard checks + 2 lines added to
+`render.ts:MANUAL_ONLY_PROTECTED_JOBS`.
+
+Schema additions:
+- v105 — `slug_aliases` table: `(source_id, alias_slug,
+  canonical_slug, notes, created_at)` with UNIQUE on `(source_id,
+  alias_slug)` + CHECK no-self-reference + partial canonical index for
+  the dangling-aliases doctor check. Originally claimed v104; bumped
+  to v105 after master merge from v0.41.21.0 took v104 for
+  `pages_atom_source_hash_idx`.
+
+Engine API additions:
+- `BrainEngine.resolveSlugWithAlias(slug, sourceOrSources)` — returns
+  the canonical slug if `slug` is in slug_aliases for any of the
+  provided source(s); else returns `slug` unchanged. Accepts scalar
+  sourceId OR sourceIds[] array (federated reads per F10). Multi-source
+  ambiguity emits a once-per-process `multi_match` warning + returns
+  first by array order. Defense-in-depth: pre-v105 brains without the
+  table return input unchanged via `isUndefinedTableError` predicate.
+
+Schema-pack manifest extensions:
+- `subtypes:` array per page_type (D5) drives `inferTypeAndSubtypeFromPack`.
+- `mapping_rules:` discriminated union over retype / page_to_link /
+  page_to_alias (D11+D12) — declarative migrations.
+- `migration_from:` field declares "I am the successor to (pack,
+  semver-range)" so `findPackSuccessors` can light up
+  `pack_upgrade_available` automatically.
+- `inferTypeAndSubtypeFromPack(filePath, pack, frontmatter)` overload
+  returns `{type, subtype?}` — ReDoS-guarded regex compile on
+  `path_pattern`; back-compat preserved via the legacy
+  `inferTypeFromPack` signature.
+
+KNOBS_HASH_VERSION bumped 5→6. One-time cache miss spike on upgrade
+(fills within `cache.ttl_seconds`, default 3600s) so cached pre-v0.41.22
+results don't leak past the new boost stage. Mid-deploy hit-rate dip
+is expected and self-healing.
+
+`ELIGIBLE_TYPES` for facts extraction (`src/core/facts/eligibility.ts`)
+extended with gbrain-base-v2 canonicals (`media`, `tweet`, `atom`,
+`concept`, `analysis`) so post-unify pages keep getting extracted.
+Codex F-ELIGIBLE caught the original deferred-to-v0.43 plan as a
+blocker: changing the default taxonomy while the backstop list
+hardcoded only gbrain-base's types would silently break facts
+extraction on the new canonical types. Undeferred.
+
+This wave went through CEO review + eng review + codex outside voice
+in plan mode before any code landed. 16 decisions locked (D1-D17), 12
+baseline fixes absorbed from codex (F7-F21), and 1 mid-implementation
+bug caught by the test suite (catch-all retype was claiming
+concept-redirect pages before the alias phase could process them —
+fixed before merge by extending the catch-all exclusion to also skip
+page_to_link / page_to_alias source types).
+
+Tests: 12 new test files, 82 unit/integration cases, 1 comprehensive
+E2E that seeds all 9 production clusters and asserts the full
+migration runs end-to-end (94 → ≤16 distinct types, alias rows
+created, link rows inserted, active pack flipped, idempotent re-run).
+
+### To take advantage of v0.41.22.0
+
+If you're a NEW user (no `~/.gbrain/` yet):
+1. `gbrain init` defaults to `gbrain-base-v2`. Done.
+
+If you're an EXISTING user on gbrain-base:
+1. `gbrain upgrade` — pulls v0.41.22 binaries and applies migration v105
+   (`slug_aliases` table).
+2. `gbrain onboard --check --explain` — see the per-cluster narrative
+   for the gbrain-base → gbrain-base-v2 migration. Shows you what
+   would change before you commit.
+3. `gbrain jobs submit unify-types --allow-protected --params
+   '{"target_pack":"gbrain-base-v2"}'` — run the migration. On a
+   186K-page brain expect ~10 min total runtime.
+4. `gbrain jobs follow <job_id>` — watch progress per phase.
+5. After completion: `gbrain onboard --check` should report
+   `pack_upgrade_available` and `type_proliferation` as `ok`.
+
+If you want to stay on gbrain-base for now: do nothing.
+`pack_upgrade_available` is `manual_only` — autopilot will never
+auto-fire it. Suppress the upgrade-banner with
+`GBRAIN_NO_ONBOARD_NUDGE=1` if you don't want to see it.
+
+If something goes wrong:
+- Per-page retypes preserve `frontmatter.legacy_type = <original>` so
+  rollback is one SQL UPDATE per page.
+- Page-to-alias and page-to-link soft-delete the source page with a
+  72h TTL — restore via `gbrain pages restore <slug>` within that window.
+- Active-pack flip is reversible via `gbrain schema use gbrain-base`.
+- File an issue: https://github.com/garrytan/gbrain/issues with
+  `gbrain doctor --json` output + contents of
+  `~/.gbrain/audit/schema-unify-YYYY-Www.jsonl` if it exists.
 
 ## [0.41.21.0] - 2026-05-27
 
@@ -466,6 +763,8 @@ it exists.
     `{"schema_version"` envelope prefix instead of walking back from
     `"checks"` (which broke once `category_scores` introduced a
     nested object between).
+
+
 ## [0.41.19.0] - 2026-05-26
 
 **Your dream cycle stops silently losing wiki links.**

@@ -1,4 +1,4 @@
-// v0.41.19.0 — single source of truth for engine batch-sizing.
+// v0.41.23.0 — single source of truth for engine batch-sizing.
 //
 // Both PostgresEngine and PGLiteEngine import from here so the constants
 // cannot drift across engines. Lives outside `src/core/engine.ts` to avoid

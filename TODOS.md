@@ -1,5 +1,19 @@
 # TODOS
 
+## v0.41.22.1 brainstorm judge fix-wave follow-ups (v0.42+)
+
+Filed from the v0.41.22.1 plan-eng-review per cross-model-tension D13c.
+Step 0 of that plan explicitly deferred a "full pricing-system DRY"
+cleanup (Option C) to keep the brainstorm fix blast radius small.
+These three items are what was deferred. None are user-reported bugs;
+all are latent-debt cleanup.
+
+- [ ] **Config-write normalization.** Whenever a user writes `gbrain config set models.tier.deep anthropic/claude-opus-4-7` we silently store the slash form. v0.41.22.1 centralized the read-side via `splitProviderModelId`, but config writes still preserve whatever shape the user typed. Canonical form should be colon (`anthropic:claude-opus-4-7`). Fix: rewrite at config-write time in `src/core/config.ts`. Breaks existing config files that explicitly hold the slash form — defer to a v0.42+ config-migration wave that also handles the rewrite + once-per-process deprecation warn. Files: `src/core/config.ts`, `src/core/model-config.ts:saveConfig` path. Priority: P3 (latent, not user-visible).
+
+- [ ] **Non-Anthropic pricing tables.** `src/core/anthropic-pricing.ts` is the only pricing surface gbrain ships. Brainstorm + LSD users routing through OpenAI / Gemini / OpenRouter get `BUDGET_TRACKER_NO_PRICING` warn-once + bypass-gate (without `--max-cost`) OR `no_pricing` hard-fail (with `--max-cost`). The right shape: rename to `provider-pricing.ts`, add OpenAI / Gemini / OpenRouter tables, route `lookupPricing` through provider-routed table selection. OpenRouter is a special case (period-vs-dash key mismatch: their `claude-sonnet-4.6` won't match our `claude-sonnet-4-6` either way). Files: `src/core/anthropic-pricing.ts` (rename + extend), `src/core/budget/budget-tracker.ts`, `src/core/eval-contradictions/cost-tracker.ts`. Priority: P2 (real user pain when running brainstorm against non-Anthropic).
+
+- [ ] **Eval-contradictions duplicate ANTHROPIC_PRICING consolidation.** `src/core/eval-contradictions/cost-tracker.ts:28-38` ships its OWN copy of the Anthropic pricing table with different keys (both bare and `anthropic:`-prefixed forms) and a silent-Haiku fallback on unknown. v0.41.22.1 routed both tables' lookups through `splitProviderModelId` but left the duplication. Right fix: delete the local table, import from `src/core/anthropic-pricing.ts`. Either (a) preserve the silent-Haiku-fallback semantic with an explicit `?? canonicalPricing['claude-haiku-4-5']` at the call site, or (b) tighten to warn-once on unknown (which changes the eval-contradictions soft-ceiling `--budget-usd` contract — coordinate with that subsystem). Files: `src/core/eval-contradictions/cost-tracker.ts`, `src/core/anthropic-pricing.ts`, `test/eval-contradictions/cost-tracker-slash.test.ts` (the legacy-Haiku-fallback pin would need updating). Priority: P3 (DRY cleanup, no user-visible impact).
+
 ## v0.41.21.0 ops-fix-wave follow-ups (v0.41.22+)
 
 - **TODO-OPS-1 (P2)**: `gbrain sync print-cron` subcommand. Print the canonical
@@ -112,7 +126,7 @@
   takes_count). Today the MCP run_onboard op runs these server-side via
   runAllOnboardChecks; doctor-remote.ts would surface them on the thin-client
   dashboard for operators who only hit the brain via MCP.
-=======
+
 ## v0.41.17.0 `--workers N` cathedral follow-ups (v0.41.18+)
 
 These were filed during the ship of `garrytan/dar-es-salaam-v1`
