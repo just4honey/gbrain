@@ -67,11 +67,52 @@ gbrain skillopt <skill-name> [flags]
   └── Final test eval on D_test → run receipt
 ```
 
+## Authoring the benchmark yourself (the common case)
+
+**The user will NOT hand-write a benchmark. You write it for them.** When the
+user says "make skill X better" and `skills/X/skillopt-benchmark.jsonl` doesn't
+exist, do NOT stop and ask them to author one, and do NOT reach for
+`--bootstrap-from-routing` unless a `routing-eval.jsonl` already exists (it
+generates tasks from ROUTING fixtures, which test dispatch, not output quality).
+Instead, author a quality benchmark from the skill itself:
+
+1. **Read `skills/X/SKILL.md`.** Identify what the skill is supposed to produce
+   and what "good" looks like — the sections, the must-haves, the length ceiling,
+   whether citations/tool-calls are expected.
+2. **Generate ~15 realistic tasks** covering the cases the skill actually handles
+   (the boring middle, not just edge cases). Each task is the prompt a user would
+   actually send.
+3. **Attach a rule judge to each task** — deterministic, free, no LLM call. Encode
+   what good output requires:
+   - `{"op":"contains","arg":"<must-have substring>"}`
+   - `{"op":"max_chars","arg":<ceiling>}` — punishes padding
+   - `{"op":"min_citations","arg":<n>}` — when sources are expected
+   - `{"op":"section_present","arg":"<heading>"}`, `{"op":"regex","arg":"..."}`,
+     `{"op":"tool_called","arg":"<tool>"}`, `{"op":"tool_not_called","arg":"<tool>"}`
+4. **Write the JSONL** (one task per line) to `skills/X/skillopt-benchmark.jsonl`.
+5. **Run with `--split 1:1:1`** so 15 tasks split a clean 5 train / 5 sel / 5 test.
+   The default `4:1:5` split needs ~50 tasks (sel = N/10, floor 5) and will
+   refuse a smaller benchmark with `D_sel has N task(s) (need >=5)`.
+6. **Dry-run first** (`--dry-run`) to show the user the cost estimate before
+   spending. Then run for real, read the outcome, and report back what changed
+   and the score delta.
+
+Benchmark line shape:
+```
+{"task_id":"x-001","task":"<user prompt>","judge":{"kind":"rule","checks":[{"op":"max_chars","arg":1800},{"op":"contains","arg":"agenda"}]}}
+```
+
+The human walkthrough of this same flow (with a complete 15-task starter) lives
+at `docs/tutorials/improving-skills-with-skillopt.md`. The benchmark IS the
+definition of quality — author it carefully; a thin benchmark optimizes for a
+thin definition.
+
 ## Decision tree
 
 | Situation | Action |
 |---|---|
-| New skill, no benchmark yet | `gbrain skillopt foo --bootstrap-from-routing` → review → `--bootstrap-reviewed` |
+| Skill has no benchmark | **Author one** (see section above), then `gbrain skillopt foo --split 1:1:1` |
+| Skill has a `routing-eval.jsonl` and you want a head start | `gbrain skillopt foo --bootstrap-from-routing` → review the generated tasks → `--bootstrap-reviewed` (routing tasks test dispatch; tighten them into quality tasks before trusting) |
 | Iterating on an existing skill | `gbrain skillopt foo --benchmark skills/foo/skillopt-benchmark.jsonl` |
 | Costly run, want preview | Add `--dry-run` |
 | Bundled skill (skills/ in gbrain repo) | Default writes proposed.md; add `--allow-mutate-bundled` to commit |

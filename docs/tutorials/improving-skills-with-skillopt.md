@@ -20,6 +20,26 @@ beats the current version** on a held-out slice.
 That's the whole idea. The benchmark is how "better" gets defined — which is why
 writing it is the one part you can't skip. Everything else is mechanical.
 
+## The easiest path: ask your agent
+
+You probably won't hand-write a benchmark, and you don't have to. If you run an
+agent over this brain (OpenClaw, Claude Code, Cursor, any MCP client with the
+gbrain skills installed), just tell it:
+
+> "Improve my meeting-prep skill — write a benchmark for it first, then run
+> skillopt and show me what changed."
+
+The agent reads the skill, authors a quality benchmark from it (that's the
+`skill-optimizer` skill's job — see
+[`skills/skill-optimizer/SKILL.md`](../../skills/skill-optimizer/SKILL.md)),
+dry-runs for cost, runs the optimizer, and reports the diff + score delta back to
+you. You review and keep or discard. That's the real workflow for most people.
+
+**Read the rest of this tutorial when you want to understand or hand-curate what
+the agent is doing** — the benchmark format, how to read the outcome, and where
+the output lands. Knowing the format also lets you sharpen a benchmark the agent
+drafted instead of starting from scratch.
+
 ## What you'll need
 
 - `gbrain` installed and a brain initialized (`gbrain --version` works).
