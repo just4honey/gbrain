@@ -107,6 +107,29 @@ async function main() {
     command = 'query';
   }
 
+  // T5 — `gbrain search modes|stats|tune` is the read-only config dashboard,
+  // NOT a free-text search for the literal word "modes". Free-text
+  // `gbrain search "<query>"` falls through to the cheap-hybrid `search` op
+  // below (T4). Preserves the v0.41.6.0 read-only connect+dispatch timeout.
+  if (command === 'search' && ['modes', 'stats', 'tune'].includes(subArgs[0] ?? '')) {
+    const { withTimeout, OperationTimeoutError } = await import('./core/timeout.ts');
+    const { runSearch } = await import('./commands/search.ts');
+    const label = 'gbrain search';
+    let engine: BrainEngine;
+    try {
+      engine = await withTimeout(connectEngine(), 10_000, `${label}: connect`);
+    } catch (e) {
+      if (e instanceof OperationTimeoutError) { console.error(`${e.label} timed out.`); process.exit(124); }
+      throw e;
+    }
+    try {
+      await withTimeout(runSearch(engine, subArgs), 10_000, label);
+    } finally {
+      await engine.disconnect();
+    }
+    return;
+  }
+
   // Per-command --help
   if (hasHelpFlag(subArgs)) {
     const op = cliOps.get(command);
