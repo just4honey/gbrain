@@ -12,6 +12,32 @@ infra and reaches into third-party packs that live outside the host skills dir.
 - [ ] **v0.41.37+: TTL+mtime cache for the skill-catalog walk.** PR1 reads fresh every call (cold path, ~ms). If telemetry shows repeated `list_skills` calls, add a TTL+mtime-keyed cache shared by `list_skills` + `get_skill`. Priority: P3 (do-nothing was the deliberate PR1 call).
 - [ ] **v0.41.37+: routing-eval for the `list_skills` instructional envelope + per-skill `tools:` version-skew validation.** The envelope is load-bearing prose with no eval gate yet; and a skill's declared `tools:` aren't validated against the serving gbrain's actual op set for version drift. Priority: P3.
 - [ ] **v0.41.37+: fix malformed `~/.agents/skills/gbrain/.../install/SKILL.md` (missing frontmatter).** Surfaced by codex's own startup error during the v0.41.36.0 plan review — an unrelated stray skill in the agents tree has no `---` frontmatter fence. Not gbrain-repo code; flag/clean separately. Priority: P3.
+## v0.41.34.0 retrieval-cathedral follow-ups (v0.42+)
+
+Deferred from the v0.41.34.0 wave (codex adversarial P1/P2 — documented tradeoffs,
+not blockers; the P0 source-isolation issues were fixed in-wave).
+
+- [ ] **P1 — Calibrate the `evidence` classifier.** `high_vector_match` is assigned
+  from `base_score >= 0.85`, but `base_score` is the pre-boost RRF/keyword/title/alias
+  pipeline score, not a pure cosine. A generic high-scoring page can read as
+  `create_safety='exists'`. Add a true vector-cosine signal (or a `keyword_exact`
+  exact-token check) so the evidence labels are grounded, not inferred from the blend.
+  File: `src/core/search/evidence.ts`. **Why:** the evidence contract is what stops
+  the duplicate-page class; mislabeled evidence weakens it.
+
+- [ ] **P1 — Page-bounded vector pagination.** `searchVector` innerLimit is
+  `offset + max(limit*5, 100)` counted BEFORE `DISTINCT ON`, so on a dense page one
+  page can consume the candidate budget and a deep `OFFSET` can underfill even when
+  more pages exist. Restructure to a two-stage pull (top-N chunks → pool → re-expand)
+  or raise innerLimit adaptively for deep offsets. Files: both engines' `searchVector`.
+  **Why:** deep search pagination on big brains can return short pages.
+
+- [ ] **P2 — Telemetry rolling-deploy gap.** Pre-v111 (mid rolling deploy), rank-1
+  telemetry INSERTs reference missing columns and the write is swallowed, so a window
+  of telemetry is silently lost and `search stats` reads empty on old tables. Either
+  feature-detect the columns before writing the extended INSERT, or accept the gap
+  (documented). File: `src/core/search/telemetry.ts`. **Why:** brief observability
+  blind spot during upgrades.
 
 ## v0.41.33.0 adaptive return-sizing follow-ups (v0.42+)
 
@@ -24,6 +50,7 @@ default-off; these are the gates and extensions before any default flip.
 - [ ] **v0.42+: gentle adaptive gate on `think`'s gather stage (A3).** The plan's A3 decision was a gentler return-gate on `runThink`'s gather candidates (cleaner context, fewer tokens per reasoning call). Deferred because the benefit is unvalidated without a longmemeval answer-quality run, and trimming the answer path (even default-off) carries regression risk. gather fuses 4 streams (page / takes-keyword / takes-vector / graph); the gate must operate on the fused output with a higher min-keep than search, validated on `gbrain eval longmemeval` answer quality (not retrieval precision). Also: `RunThinkOpts` has no `sourceId` today, so think's gather runs unscoped (codex finding) — scope-isolated think needs that plumbing first. Priority: P2.
 - [ ] **v0.42+: `--explain` human header for adaptive_return.** The decision is in `HybridSearchMeta.adaptive_return` and surfaces in `--json` today. The per-result `explain-formatter.ts` is result-scoped and can't render a per-query meta line; the human `gbrain search --explain` header needs the meta threaded through `cli.ts:formatResult` (it currently only receives `results`). Add a one-line gate-decision header (intent / cap / kept of total). Priority: P3.
 - [ ] **v0.42+: structured-alias / facts-mode fidelity for the PrecisionMemBench eval.** The gbrain-evals benchmark seeds beliefs as pages with aliases in the body (real FTS). A second fidelity that exercises gbrain's structured alias/entity-resolution layer (facts with `valid_until` + entity resolution) would measure gbrain's structured-belief path on the 23 alias cases. Lives in gbrain-evals (`eval/precisionmembench/seed.ts` throws on `fidelity:'structured'` today). Priority: P3.
+
 ## v0.41.32.0 content-relative staleness follow-ups (v0.42+)
 
 Filed from the v0.41.32.0 wave (supersedes #1623 — commit-relative sync
@@ -57,6 +84,7 @@ were deliberately scoped out (CM2 + the remote post-sync-divergence residual).
     different axis from sync staleness). Content-relativizing it (a source whose
     newest commit predates its last full cycle doesn't need re-cycling) is a
     natural companion to this probe phase. Priority: P3.
+
 ## brainstorm/lsd --save source-awareness (v0.42+)
 
 Filed from the `--save` dual-sink hardening wave (route through the canonical
