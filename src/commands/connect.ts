@@ -2,20 +2,26 @@
  * `gbrain connect` — one-command coding-agent onboarding from a bearer token.
  *
  * Turns an MCP URL + bearer token into a paste-ready block (or wires it up
- * directly with --install) that connects Claude Code straight to a remote
- * `gbrain serve --http` and teaches the agent to self-orient via
- * `list_skills` / `get_brain_identity`. Direct HTTP MCP — no local install or
- * thin-client config needed for the connection.
+ * directly with --install) that connects a coding agent straight to a remote
+ * `gbrain serve --http` and teaches it to self-orient via `get_brain_identity`
+ * + `list_skills`. Direct HTTP MCP — no local install or thin-client config
+ * needed for the connection.
  *
  *   gbrain connect <mcp-url> [--token <bearer>] [--name gbrain]
- *                  [--agent claude-code|generic] [--install] [--yes]
- *                  [--json] [--show-token] [--force] [--timeout-ms N]
+ *                  [--agent claude-code|codex|perplexity|generic]
+ *                  [--install] [--yes] [--json] [--show-token] [--force]
+ *                  [--timeout-ms N]
  *
- * Token resolution: --token > $GBRAIN_REMOTE_TOKEN > (print) placeholder /
- * (install) error. Default token form is the LITERAL token inline in the
- * command (matches docs/mcp/CLAUDE_CODE.md and is verified to work). Env-var
- * indirection is deferred until Claude Code's runtime header `${VAR}` expansion
- * is verified (see plan T6 / TODOS).
+ * Per-agent shape:
+ *   - claude-code: `claude mcp add ... -H "Authorization: Bearer <tok>"`
+ *     (literal token inline; --install runs it). Env-var indirection for the
+ *     header is deferred until Claude Code's runtime `${VAR}` expansion is
+ *     verified (plan T6).
+ *   - codex: `codex mcp add <name> --url <url> --bearer-token-env-var
+ *     GBRAIN_REMOTE_TOKEN` — Codex reads the token from the env var at runtime,
+ *     so the token never lands in Codex config (--install runs it).
+ *   - perplexity: GUI connector (Settings → Connectors). No CLI, no --install.
+ *   - generic: prints the URL + Authorization header for any other MCP client.
  */
 
 import { execFileSync } from 'child_process';
@@ -31,26 +37,50 @@ const NAME_RE = /^[a-z0-9][a-z0-9_-]*$/;
 // Single source of truth shared with the probe (was a duplicated 15_000 literal).
 const DEFAULT_TIMEOUT_MS = DEFAULT_PROBE_TIMEOUT_MS;
 
+export type AgentId = 'claude-code' | 'codex' | 'perplexity' | 'generic';
+
+interface AgentSpec {
+  id: AgentId;
+  label: string;       // human label for messages
+  binary?: string;     // CLI binary backing --install ('claude' | 'codex')
+  installable: boolean;
+}
+
+export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
+  'claude-code': { id: 'claude-code', label: 'Claude Code', binary: 'claude', installable: true },
+  codex: { id: 'codex', label: 'Codex', binary: 'codex', installable: true },
+  perplexity: { id: 'perplexity', label: 'Perplexity Computer', installable: false },
+  generic: { id: 'generic', label: 'your agent', installable: false },
+};
+
+export const AGENT_IDS: AgentId[] = ['claude-code', 'codex', 'perplexity', 'generic'];
+
 export const LEARN_INSTRUCTION =
   'Once connected, call the `get_brain_identity` tool (whose brain this is), then ' +
   '`list_skills` (everything it can do; if it errors, the host has not enabled skill ' +
   'publishing — these core tools still work: search, query, get_page, put_page, ' +
   'capture, think, find_experts). Always search the brain before answering or writing.';
 
+const SECRET_NOTE =
+  'Note: that bearer token is a long-lived, full-access secret — keep it private and ' +
+  'prefer a scoped/short-lived token if your host supports one.';
+
 const HELP = `gbrain connect — wire a coding agent to a remote gbrain over MCP
 
 Usage:
   gbrain connect <mcp-url> [--token <bearer>] [flags]
 
-Prints a copy-paste block for Claude Code (default), or wires it up directly
-with --install. The MCP URL is your remote 'gbrain serve --http' endpoint;
-a bare host is rejected — pass an explicit https:// URL.
+Prints a copy-paste setup block for your agent, or wires it up directly with
+--install (claude-code + codex only). The MCP URL is your remote
+'gbrain serve --http' endpoint; a bare host is rejected — pass an explicit
+https:// URL.
 
 Flags:
   --token <bearer>     Bearer token (else $${ENV_VAR}; from 'gbrain auth create')
   --name <id>          MCP server name in the agent (default: ${DEFAULT_NAME})
-  --agent <kind>       claude-code (default) | generic
-  --install            Run 'claude mcp add' for you, then smoke-test the token
+  --agent <kind>       claude-code (default) | codex | perplexity | generic
+  --install            Run the agent's MCP-add command, then smoke-test the token
+                       (claude-code + codex only)
   --yes                Skip the install confirmation prompt
   --force              On --install, replace an existing server of the same name
   --json               Emit machine-readable JSON (token redacted)
@@ -60,6 +90,8 @@ Flags:
 Examples:
   gbrain connect https://brain.example.com/mcp --token gbrain_xxx
   gbrain connect https://brain.example.com:3131 --install --yes
+  gbrain connect https://brain.example.com/mcp --token gbrain_xxx --agent codex
+  gbrain connect https://brain.example.com/mcp --token gbrain_xxx --agent perplexity
   GBRAIN_REMOTE_TOKEN=gbrain_xxx gbrain connect https://brain.example.com/mcp --json
 `;
 
@@ -188,18 +220,24 @@ export function buildClaudeMcpAddArgv(p: { name: string; url: string; headerToke
   return ['mcp', 'add', p.name, '-t', 'http', p.url, '-H', `Authorization: Bearer ${p.headerToken}`];
 }
 
+/** Codex reads the bearer from an env var at runtime — the token is NOT in argv. */
+export function buildCodexMcpAddArgv(p: { name: string; url: string; envVar: string }): string[] {
+  return ['mcp', 'add', p.name, '--url', p.url, '--bearer-token-env-var', p.envVar];
+}
+
 /**
- * Render an argv to a copy-pasteable `claude ...` shell string. Args that
- * aren't already shell-safe are POSIX single-quoted (so `$()`, backticks, etc.
- * in a bearer token are inert literals when the block is pasted into a shell —
- * double-quoting would still allow command substitution).
+ * POSIX single-quote any arg that isn't already shell-safe, so `$()`, backticks,
+ * etc. in a token are inert literals when the block is pasted into a shell
+ * (double-quoting would still allow command substitution).
  */
 function shellQuote(arg: string): string {
   if (/^[A-Za-z0-9_.:/@-]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, "'\\''")}'`;
 }
-export function claudeMcpAddCmdString(argv: string[]): string {
-  return `claude ${argv.map(shellQuote).join(' ')}`;
+
+/** Render `<binary> <argv...>` as a copy-pasteable, shell-safe command string. */
+export function cmdString(binary: string, argv: string[]): string {
+  return `${binary} ${argv.map(shellQuote).join(' ')}`;
 }
 
 export function redactToken(s: string, token: string | null): string {
@@ -211,50 +249,97 @@ export function redactToken(s: string, token: string | null): string {
   return out;
 }
 
-export function buildConnectBlock(p: { agent: 'claude-code' | 'generic'; name: string; url: string; token: string | null }): string {
+function claudeBlock(p: { name: string; url: string; token: string | null }): string {
   const headerToken = p.token ?? PLACEHOLDER_TOKEN;
-  if (p.agent === 'generic') {
-    return [
-      '# Add an HTTP MCP server pointed at your gbrain:',
-      `#   URL:    ${p.url}`,
-      `#   Header: Authorization: Bearer ${headerToken}`,
-      '',
-      LEARN_INSTRUCTION,
-    ].join('\n');
-  }
-  const cmd = claudeMcpAddCmdString(buildClaudeMcpAddArgv({ name: p.name, url: p.url, headerToken }));
+  const cmd = cmdString('claude', buildClaudeMcpAddArgv({ name: p.name, url: p.url, headerToken }));
+  const lines = ['# Paste into Claude Code:', '', 'Connect my knowledge brain, then learn what it can do:', '', `  ${cmd}`, ''];
+  if (!p.token) lines.push(`Replace ${PLACEHOLDER_TOKEN} with a token from \`gbrain auth create "claude-code"\` on the host.`, '');
+  lines.push(LEARN_INSTRUCTION, '', SECRET_NOTE);
+  return lines.join('\n');
+}
+
+function codexBlock(p: { name: string; url: string; token: string | null }): string {
+  const tokenValue = p.token ?? PLACEHOLDER_TOKEN;
+  const cmd = cmdString('codex', buildCodexMcpAddArgv({ name: p.name, url: p.url, envVar: ENV_VAR }));
   const lines = [
-    '# Paste into Claude Code:',
+    '# Paste into Codex:',
     '',
     'Connect my knowledge brain, then learn what it can do:',
     '',
+    `  export ${ENV_VAR}=${shellQuote(tokenValue)}`,
     `  ${cmd}`,
     '',
   ];
-  if (!p.token) {
-    lines.push(`Replace ${PLACEHOLDER_TOKEN} with a token from \`gbrain auth create "claude-code"\` on the host.`, '');
-  }
+  if (!p.token) lines.push(`Replace ${PLACEHOLDER_TOKEN} with a token from \`gbrain auth create "codex"\` on the host.`, '');
   lines.push(
+    `Codex reads the token from $${ENV_VAR} at runtime — keep that variable set in your shell profile so new Codex sessions can reach the brain.`,
+    '',
     LEARN_INSTRUCTION,
     '',
-    'Note: that bearer token is a long-lived, full-access secret — keep it private and prefer a scoped/short-lived token if your host supports one.',
+    SECRET_NOTE,
   );
   return lines.join('\n');
 }
 
-export function buildJson(p: { url: string; name: string; agent: string; token: string | null; showToken: boolean }): Record<string, unknown> {
-  const headerToken = p.token ? (p.showToken ? p.token : REDACTED) : PLACEHOLDER_TOKEN;
-  const argv = buildClaudeMcpAddArgv({ name: p.name, url: p.url, headerToken });
+function perplexityBlock(p: { url: string; token: string | null }): string {
+  const tokenValue = p.token ?? PLACEHOLDER_TOKEN;
+  return [
+    '# In Perplexity (Pro): Settings → Connectors → add a remote MCP server:',
+    `#   URL:    ${p.url}`,
+    '#   Auth:   Bearer token (API key)',
+    `#   Token:  ${tokenValue}`,
+    '',
+    'Then, in a Perplexity conversation: "Use my GBrain to search for <topic>".',
+    '',
+    LEARN_INSTRUCTION,
+    '',
+    SECRET_NOTE,
+  ].join('\n');
+}
+
+function genericBlock(p: { url: string; token: string | null }): string {
+  const headerToken = p.token ?? PLACEHOLDER_TOKEN;
+  return [
+    '# Add an HTTP MCP server pointed at your gbrain:',
+    `#   URL:    ${p.url}`,
+    `#   Header: Authorization: Bearer ${headerToken}`,
+    '',
+    LEARN_INSTRUCTION,
+  ].join('\n');
+}
+
+export function buildConnectBlock(p: { agent: AgentId; name: string; url: string; token: string | null }): string {
+  switch (p.agent) {
+    case 'claude-code': return claudeBlock(p);
+    case 'codex': return codexBlock(p);
+    case 'perplexity': return perplexityBlock(p);
+    case 'generic': return genericBlock(p);
+  }
+}
+
+export function buildJson(p: { url: string; name: string; agent: AgentId; token: string | null; showToken: boolean }): Record<string, unknown> {
+  const shownToken = p.token ? (p.showToken ? p.token : REDACTED) : PLACEHOLDER_TOKEN;
+  let command_argv: string[] | null = null;
+  let command: string | null = null;
+  if (p.agent === 'claude-code') {
+    command_argv = buildClaudeMcpAddArgv({ name: p.name, url: p.url, headerToken: shownToken });
+    command = cmdString('claude', command_argv);
+  } else if (p.agent === 'codex') {
+    // Codex command carries no token (env-var name only), so it's safe verbatim.
+    command_argv = buildCodexMcpAddArgv({ name: p.name, url: p.url, envVar: ENV_VAR });
+    command = cmdString('codex', command_argv);
+  }
   return {
     schema_version: 1,
+    agent: p.agent,
     mcp_url: p.url,
     name: p.name,
-    agent: p.agent,
     env_var: ENV_VAR,
     token_present: p.token != null,
     token_redacted: p.token != null && !p.showToken,
-    claude_mcp_add_argv: argv,
-    claude_mcp_add_cmd: claudeMcpAddCmdString(argv),
+    header: `Authorization: Bearer ${shownToken}`,
+    command, // runnable CLI command; null for perplexity/generic (UI/manual setup)
+    command_argv,
     learn_instruction: LEARN_INSTRUCTION,
   };
 }
@@ -266,9 +351,10 @@ export function buildJson(p: { url: string; name: string; agent: string; token: 
 export interface ConnectDeps {
   isTTY(): boolean;
   promptYesNo(question: string): Promise<boolean>;
-  hasClaude(): boolean;
-  runClaude(argv: string[]): { code: number; stdout: string; stderr: string };
+  hasBinary(binary: string): boolean;
+  runBinary(binary: string, argv: string[]): { code: number; stdout: string; stderr: string };
   probe(url: string, token: string, timeoutMs: number): Promise<ConnectProbeResult>;
+  env(name: string): string | undefined;
 }
 
 async function defaultPromptYesNo(question: string): Promise<boolean> {
@@ -278,9 +364,9 @@ async function defaultPromptYesNo(question: string): Promise<boolean> {
   return answer === 'y' || answer === 'yes';
 }
 
-function defaultRunClaude(argv: string[]): { code: number; stdout: string; stderr: string } {
+function defaultRunBinary(binary: string, argv: string[]): { code: number; stdout: string; stderr: string } {
   try {
-    const stdout = execFileSync('claude', argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const stdout = execFileSync(binary, argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     return { code: 0, stdout: stdout ?? '', stderr: '' };
   } catch (e) {
     const err = e as { status?: number; stdout?: string | Buffer; stderr?: string | Buffer; message?: string };
@@ -295,16 +381,17 @@ function defaultRunClaude(argv: string[]): { code: number; stdout: string; stder
 const defaultDeps: ConnectDeps = {
   isTTY: () => !!process.stdin.isTTY,
   promptYesNo: defaultPromptYesNo,
-  hasClaude: () => {
+  hasBinary: (binary) => {
     try {
-      execFileSync('claude', ['--version'], { stdio: 'ignore' });
+      execFileSync(binary, ['--version'], { stdio: 'ignore' });
       return true;
     } catch {
       return false;
     }
   },
-  runClaude: defaultRunClaude,
+  runBinary: defaultRunBinary,
   probe: (url, token, timeoutMs) => probeBrainIdentity(url, token, { timeoutMs }),
+  env: (name) => process.env[name],
 };
 
 // ---------------------------------------------------------------------------
@@ -315,7 +402,7 @@ interface ParsedFlags {
   url?: string;
   token?: string;
   name: string;
-  agent: 'claude-code' | 'generic';
+  agent: AgentId;
   install: boolean;
   yes: boolean;
   force: boolean;
@@ -367,8 +454,8 @@ function parseArgs(args: string[]): ParsedFlags {
       case '--agent': {
         const v = takeValue('--agent');
         if (v === undefined) break;
-        if (v === 'claude-code' || v === 'generic') out.agent = v;
-        else out.agentError = `Unknown --agent '${v}'. Use claude-code or generic.`;
+        if ((AGENT_IDS as string[]).includes(v)) out.agent = v as AgentId;
+        else out.agentError = `Unknown --agent '${v}'. Use one of: ${AGENT_IDS.join(', ')}.`;
         break;
       }
       case '--timeout-ms': {
@@ -407,9 +494,10 @@ export async function runConnect(args: string[], deps: ConnectDeps = defaultDeps
   if (!norm.ok) fail(norm.error);
   if (norm.warning) console.error(norm.warning);
   const url = norm.url;
+  const spec = AGENT_SPECS[f.agent];
 
   const mode = f.install ? 'install' : 'print';
-  const tok = resolveToken({ tokenFlag: f.token ?? null, env: process.env[ENV_VAR] ?? null, mode });
+  const tok = resolveToken({ tokenFlag: f.token ?? null, env: deps.env(ENV_VAR) ?? null, mode });
   if (tok.kind === 'error') fail(tok.error);
   const token: string | null = tok.kind === 'literal' ? tok.token : null;
 
@@ -424,16 +512,17 @@ export async function runConnect(args: string[], deps: ConnectDeps = defaultDeps
 
   // --install path. token is guaranteed literal here (install mode resolveToken).
   const realToken = token as string;
-  if (f.agent !== 'claude-code') {
-    fail('--install only supports --agent claude-code. For other agents, drop --install and use the printed block.');
+  if (!spec.installable) {
+    fail(`--install supports claude-code and codex. ${spec.label} is set up through its own UI — drop --install to print the setup steps.`);
   }
-  if (!deps.hasClaude()) {
-    fail("Claude Code CLI ('claude') not found on PATH. Install Claude Code, or drop --install to print the command to run manually.");
+  const binary = spec.binary as string; // 'claude' | 'codex'
+  if (!deps.hasBinary(binary)) {
+    fail(`${spec.label} CLI ('${binary}') not found on PATH. Install ${spec.label}, or drop --install to print the command to run manually.`);
   }
 
-  const exists = deps.runClaude(['mcp', 'get', f.name]).code === 0;
+  const exists = deps.runBinary(binary, ['mcp', 'get', f.name]).code === 0;
   if (exists && !f.force) {
-    fail(`An MCP server named '${f.name}' already exists in Claude Code. Run 'claude mcp remove ${f.name}' first, pass --name <other>, or --force to replace it.`);
+    fail(`An MCP server named '${f.name}' already exists in ${spec.label}. Run '${binary} mcp remove ${f.name}' first, pass --name <other>, or --force to replace it.`);
   }
 
   if (!f.yes) {
@@ -443,25 +532,35 @@ export async function runConnect(args: string[], deps: ConnectDeps = defaultDeps
       // silently proceeding when there's no TTY to confirm at.
       fail('--install in a non-interactive shell requires --yes (refusing to register a credential-bearing MCP server without confirmation).');
     }
-    const ok = await deps.promptYesNo(`Add MCP server '${f.name}' -> ${url} to Claude Code?`);
+    const ok = await deps.promptYesNo(`Add MCP server '${f.name}' -> ${url} to ${spec.label}?`);
     if (!ok) fail('Aborted.');
   }
 
   let removedExisting = false;
   if (exists && f.force) {
-    const rm = deps.runClaude(['mcp', 'remove', f.name]);
+    const rm = deps.runBinary(binary, ['mcp', 'remove', f.name]);
     if (rm.code !== 0) {
       fail(`Could not replace existing server '${f.name}': ${redactToken(rm.stderr || rm.stdout, realToken)}`);
     }
     removedExisting = true;
   }
 
-  const add = deps.runClaude(buildClaudeMcpAddArgv({ name: f.name, url, headerToken: realToken }));
+  const addArgv = f.agent === 'codex'
+    ? buildCodexMcpAddArgv({ name: f.name, url, envVar: ENV_VAR })
+    : buildClaudeMcpAddArgv({ name: f.name, url, headerToken: realToken });
+  const add = deps.runBinary(binary, addArgv);
   if (add.code !== 0) {
     const note = removedExisting ? ` (note: the previous '${f.name}' was already removed — re-run to restore it)` : '';
-    fail(`'claude mcp add' failed${note}: ${redactToken(add.stderr || add.stdout, realToken)}`);
+    fail(`'${binary} mcp add' failed${note}: ${redactToken(add.stderr || add.stdout, realToken)}`);
   }
   console.error(`Added MCP server '${f.name}' -> ${url}.`);
+
+  // Codex reads the token from the env var at runtime, not from its config.
+  // If the current env doesn't already carry it, the user must export it.
+  if (f.agent === 'codex' && deps.env(ENV_VAR) !== realToken) {
+    console.error(`Codex reads the token from $${ENV_VAR} at runtime. Add this to your shell profile so new sessions can reach the brain:`);
+    console.error(`  export ${ENV_VAR}=<your-token>`);
+  }
 
   // D4 smoke-test: prove the token actually authenticates a tool call now,
   // instead of failing silently on the agent's first request.

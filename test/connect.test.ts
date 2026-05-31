@@ -6,12 +6,14 @@ import {
   resolveToken,
   isValidName,
   buildClaudeMcpAddArgv,
-  claudeMcpAddCmdString,
+  buildCodexMcpAddArgv,
+  cmdString,
   redactToken,
   buildConnectBlock,
   buildJson,
   runConnect,
   type ConnectDeps,
+  AGENT_IDS,
   ENV_VAR,
   PLACEHOLDER_TOKEN,
   REDACTED,
@@ -178,17 +180,22 @@ describe('isValidName', () => {
 });
 
 describe('argv + command string', () => {
-  test('argv shape', () => {
+  test('claude argv shape', () => {
     expect(buildClaudeMcpAddArgv({ name: 'gbrain', url: 'https://h/mcp', headerToken: 'TOK' })).toEqual([
       'mcp', 'add', 'gbrain', '-t', 'http', 'https://h/mcp', '-H', 'Authorization: Bearer TOK',
     ]);
   });
+  test('codex argv shape — env-var bearer, no token in argv', () => {
+    expect(buildCodexMcpAddArgv({ name: 'gbrain', url: 'https://h/mcp', envVar: ENV_VAR })).toEqual([
+      'mcp', 'add', 'gbrain', '--url', 'https://h/mcp', '--bearer-token-env-var', ENV_VAR,
+    ]);
+  });
   test('command string single-quotes the header (paste-safe)', () => {
-    const cmd = claudeMcpAddCmdString(buildClaudeMcpAddArgv({ name: 'gbrain', url: 'https://h/mcp', headerToken: 'TOK' }));
+    const cmd = cmdString('claude', buildClaudeMcpAddArgv({ name: 'gbrain', url: 'https://h/mcp', headerToken: 'TOK' }));
     expect(cmd).toBe("claude mcp add gbrain -t http https://h/mcp -H 'Authorization: Bearer TOK'");
   });
   test('a token with shell metacharacters cannot trigger command substitution on paste', () => {
-    const cmd = claudeMcpAddCmdString(buildClaudeMcpAddArgv({ name: 'gbrain', url: 'https://h/mcp', headerToken: 'gbrain_$(touch /tmp/pwned)`x`' }));
+    const cmd = cmdString('claude', buildClaudeMcpAddArgv({ name: 'gbrain', url: 'https://h/mcp', headerToken: 'gbrain_$(touch /tmp/pwned)`x`' }));
     // Single-quoted → the $() and backticks are inert literals, not double-quoted.
     expect(cmd).toContain("'Authorization: Bearer gbrain_$(touch /tmp/pwned)`x`'");
     expect(cmd).not.toContain('"Authorization');
@@ -228,14 +235,37 @@ describe('buildConnectBlock', () => {
     expect(block).not.toContain('claude mcp add');
     expect(block).toContain(LEARN_INSTRUCTION);
   });
+  test('codex emits the codex command + env-var export, token only in export', () => {
+    const block = buildConnectBlock({ agent: 'codex', name: 'gbrain', url: 'https://h/mcp', token: 'TOK' });
+    expect(block).toContain('codex mcp add gbrain --url https://h/mcp --bearer-token-env-var GBRAIN_REMOTE_TOKEN');
+    expect(block).toContain('export GBRAIN_REMOTE_TOKEN=TOK');
+    // the codex command itself must not carry the token
+    expect(block).toMatch(/codex mcp add[^\n]*$/m);
+    expect(block).toContain(LEARN_INSTRUCTION);
+    expect(block).toMatch(/reads the token from \$GBRAIN_REMOTE_TOKEN/);
+  });
+  test('codex single-quotes a metachar token in the export line', () => {
+    const block = buildConnectBlock({ agent: 'codex', name: 'gbrain', url: 'https://h/mcp', token: 'gbrain_$(x)`y`' });
+    expect(block).toContain("export GBRAIN_REMOTE_TOKEN='gbrain_$(x)`y`'");
+  });
+  test('perplexity emits GUI connector steps with URL + token, no CLI command', () => {
+    const block = buildConnectBlock({ agent: 'perplexity', name: 'gbrain', url: 'https://h/mcp', token: 'TOK' });
+    expect(block).toMatch(/Settings.+Connectors/);
+    expect(block).toContain('URL:    https://h/mcp');
+    expect(block).toContain('Token:  TOK');
+    expect(block).not.toContain('mcp add');
+    expect(block).toContain(LEARN_INSTRUCTION);
+  });
 });
 
 describe('buildJson', () => {
-  test('redacts the token by default', () => {
+  test('redacts the token by default; claude has a command', () => {
     const j = buildJson({ url: 'https://h/mcp', name: 'gbrain', agent: 'claude-code', token: 'SeKrEt9', showToken: false });
     expect(j.token_present).toBe(true);
     expect(j.token_redacted).toBe(true);
     expect(j.env_var).toBe(ENV_VAR);
+    expect(typeof j.command).toBe('string');
+    expect(Array.isArray(j.command_argv)).toBe(true);
     expect(JSON.stringify(j)).not.toContain('SeKrEt9');
     expect(JSON.stringify(j)).toContain(REDACTED);
   });
@@ -248,6 +278,18 @@ describe('buildJson', () => {
     const j = buildJson({ url: 'https://h/mcp', name: 'gbrain', agent: 'claude-code', token: null, showToken: false });
     expect(j.token_present).toBe(false);
     expect(JSON.stringify(j)).toContain(PLACEHOLDER_TOKEN);
+  });
+  test('codex command carries the env-var name, never the token (even with --show-token)', () => {
+    const j = buildJson({ url: 'https://h/mcp', name: 'gbrain', agent: 'codex', token: 'SeKrEt9', showToken: true });
+    expect(j.command).toContain('--bearer-token-env-var GBRAIN_REMOTE_TOKEN');
+    expect(j.command).not.toContain('SeKrEt9'); // token is in the env-var, not the command
+    expect(j.header).toContain('Authorization: Bearer SeKrEt9'); // header field carries it under --show-token
+  });
+  test('perplexity has no runnable command', () => {
+    const j = buildJson({ url: 'https://h/mcp', name: 'gbrain', agent: 'perplexity', token: 'TOK', showToken: false });
+    expect(j.command).toBeNull();
+    expect(j.command_argv).toBeNull();
+    expect(j.header).toContain('Authorization: Bearer');
   });
 });
 
@@ -378,9 +420,10 @@ function installDeps(over: Partial<ConnectDeps> = {}): ConnectDeps {
   return {
     isTTY: () => false,
     promptYesNo: async () => true,
-    hasClaude: () => true,
-    runClaude: (argv) => (argv[1] === 'get' ? { code: 1, stdout: '', stderr: '' } : { code: 0, stdout: '', stderr: '' }),
+    hasBinary: () => true,
+    runBinary: (_binary, argv) => (argv[1] === 'get' ? { code: 1, stdout: '', stderr: '' } : { code: 0, stdout: '', stderr: '' }),
     probe: async () => ({ ok: true, identity: 'brain: alice-example' }),
+    env: () => undefined, // tests control the env; real GBRAIN_REMOTE_TOKEN must not leak in
     ...over,
   };
 }
@@ -412,7 +455,7 @@ describe('runConnect --install', () => {
   test('missing claude binary fails fast', async () => {
     const r = await runWithExitCapture(
       ['https://brain.example.com/mcp', '--token', 'tok', '--install', '--yes'],
-      installDeps({ hasClaude: () => false }),
+      installDeps({ hasBinary: () => false }),
     );
     expect(r.exitCode).toBe(1);
     expect(r.err.join('\n')).toMatch(/not found on PATH/);
@@ -421,7 +464,7 @@ describe('runConnect --install', () => {
   test('existing server name without --force is refused', async () => {
     const r = await runWithExitCapture(
       ['https://brain.example.com/mcp', '--token', 'tok', '--install', '--yes'],
-      installDeps({ runClaude: () => ({ code: 0, stdout: '', stderr: '' }) }), // get returns 0 → exists
+      installDeps({ runBinary: () => ({ code: 0, stdout: '', stderr: '' }) }), // get returns 0 → exists
     );
     expect(r.exitCode).toBe(1);
     expect(r.err.join('\n')).toMatch(/already exists/);
@@ -441,7 +484,7 @@ describe('runConnect --install', () => {
     const r = await runWithExitCapture(
       ['https://brain.example.com/mcp', '--token', 'tok', '--install', '--yes', '--force'],
       installDeps({
-        runClaude: (argv) => { calls.push(argv); return { code: 0, stdout: '', stderr: '' }; }, // get→0 (exists), remove→0, add→0
+        runBinary: (_b, argv) => { calls.push(argv); return { code: 0, stdout: '', stderr: '' }; }, // get→0 (exists), remove→0, add→0
       }),
     );
     expect(r.exitCode).toBeUndefined();
@@ -454,7 +497,7 @@ describe('runConnect --install', () => {
     const r = await runWithExitCapture(
       ['https://brain.example.com/mcp', '--token', 'gbrain_secret', '--install', '--yes', '--force'],
       installDeps({
-        runClaude: (argv) => (argv[1] === 'remove'
+        runBinary: (_b, argv) => (argv[1] === 'remove'
           ? { code: 1, stdout: '', stderr: 'remove failed near gbrain_secret' }
           : { code: 0, stdout: '', stderr: '' }),
       }),
@@ -469,7 +512,7 @@ describe('runConnect --install', () => {
     const r = await runWithExitCapture(
       ['https://brain.example.com/mcp', '--token', 'gbrain_secret', '--install', '--yes'],
       installDeps({
-        runClaude: (argv) => (argv[1] === 'add'
+        runBinary: (_b, argv) => (argv[1] === 'add'
           ? { code: 1, stdout: '', stderr: 'add blew up with gbrain_secret' }
           : { code: 1, stdout: '', stderr: '' }), // get→1 (not exists)
       }),
@@ -487,7 +530,7 @@ describe('runConnect --install', () => {
       installDeps({
         isTTY: () => true,
         promptYesNo: async () => false,
-        runClaude: (argv) => { calls.push(argv); return { code: argv[1] === 'get' ? 1 : 0, stdout: '', stderr: '' }; },
+        runBinary: (_b, argv) => { calls.push(argv); return { code: argv[1] === 'get' ? 1 : 0, stdout: '', stderr: '' }; },
       }),
     );
     expect(r.exitCode).toBe(1);
@@ -501,7 +544,44 @@ describe('runConnect --install', () => {
       installDeps(),
     );
     expect(r.exitCode).toBe(1);
-    expect(r.err.join('\n')).toMatch(/only supports --agent claude-code/);
+    expect(r.err.join('\n')).toMatch(/--install supports claude-code and codex/);
+  });
+
+  test('--install with --agent perplexity is rejected (GUI connector)', async () => {
+    const r = await runWithExitCapture(
+      ['https://brain.example.com/mcp', '--token', 'tok', '--install', '--yes', '--agent', 'perplexity'],
+      installDeps(),
+    );
+    expect(r.exitCode).toBe(1);
+    expect(r.err.join('\n')).toMatch(/Perplexity Computer is set up through its own UI/);
+  });
+
+  test('--agent codex --install runs the codex CLI and hints the env var', async () => {
+    const calls: Array<{ binary: string; argv: string[] }> = [];
+    const r = await runWithExitCapture(
+      ['https://brain.example.com/mcp', '--token', 'gbrain_tok', '--install', '--yes', '--agent', 'codex'],
+      installDeps({
+        runBinary: (binary, argv) => { calls.push({ binary, argv }); return { code: argv[1] === 'get' ? 1 : 0, stdout: '', stderr: '' }; },
+        env: () => undefined, // GBRAIN_REMOTE_TOKEN not set → expect the export hint
+      }),
+    );
+    expect(r.exitCode).toBeUndefined();
+    // Uses the codex binary with the env-var bearer form (no token in argv).
+    const add = calls.find((c) => c.argv[1] === 'add');
+    expect(add?.binary).toBe('codex');
+    expect(add?.argv).toEqual(['mcp', 'add', 'gbrain', '--url', 'https://brain.example.com/mcp', '--bearer-token-env-var', 'GBRAIN_REMOTE_TOKEN']);
+    expect(JSON.stringify(add?.argv)).not.toContain('gbrain_tok');
+    expect(r.err.join('\n')).toMatch(/export GBRAIN_REMOTE_TOKEN/);
+    expect(r.err.join('\n')).toMatch(/Verified/);
+  });
+
+  test('--agent codex --install skips the env hint when GBRAIN_REMOTE_TOKEN already matches', async () => {
+    const r = await runWithExitCapture(
+      ['https://brain.example.com/mcp', '--token', 'gbrain_tok', '--install', '--yes', '--agent', 'codex'],
+      installDeps({ env: (n) => (n === 'GBRAIN_REMOTE_TOKEN' ? 'gbrain_tok' : undefined) }),
+    );
+    expect(r.exitCode).toBeUndefined();
+    expect(r.err.join('\n')).not.toMatch(/Add this to your shell profile/);
   });
 
   test('non-interactive --install without --yes is refused', async () => {
@@ -579,5 +659,25 @@ describe('runConnect print mode', () => {
       installDeps({ probe: async (_u, _t, ms) => { seen = ms; return { ok: true, identity: 'ok' }; } }),
     );
     expect(seen).toBe(15000);
+  });
+
+  test('--agent codex print mode emits the codex block', async () => {
+    const r = await runWithExitCapture(['https://brain.example.com/mcp', '--token', 'gbrain_tok', '--agent', 'codex'], installDeps());
+    expect(r.exitCode).toBeUndefined();
+    const out = r.out.join('\n');
+    expect(out).toContain('codex mcp add gbrain --url https://brain.example.com/mcp --bearer-token-env-var GBRAIN_REMOTE_TOKEN');
+    expect(out).toContain('export GBRAIN_REMOTE_TOKEN=gbrain_tok');
+  });
+
+  test('--agent perplexity print mode emits GUI connector steps', async () => {
+    const r = await runWithExitCapture(['https://brain.example.com/mcp', '--token', 'gbrain_tok', '--agent', 'perplexity'], installDeps());
+    expect(r.exitCode).toBeUndefined();
+    expect(r.out.join('\n')).toMatch(/Settings.+Connectors/);
+  });
+});
+
+describe('AGENT_IDS', () => {
+  test('exposes the four supported agents', () => {
+    expect(AGENT_IDS).toEqual(['claude-code', 'codex', 'perplexity', 'generic']);
   });
 });
