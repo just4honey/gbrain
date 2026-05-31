@@ -1,5 +1,5 @@
 /**
- * v0.41.34.0 — pins the agent-facing autocut surface on the `query` op.
+ * v0.42.3.0 — pins the agent-facing autocut surface on the `query` op.
  *
  * Autocut is the smart default; the param exists ONLY as a ceiling override
  * (force the full top-K). The description must teach the agent that they

@@ -1,5 +1,5 @@
 /**
- * v0.41.34.0 — autocut pure-function tests.
+ * v0.42.3.0 — autocut pure-function tests.
  *
  * Pins the score-discontinuity algorithm + the resolve ladder. No engine,
  * no network — applyAutocut takes a list + a scoreOf accessor.

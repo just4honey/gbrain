@@ -135,7 +135,7 @@ export const METRIC_GLOSSARY: Readonly<Record<string, Readonly<MetricGlossEntry>
   }),
 
   // ────────────────────────────────────────────────────────────────────────
-  // Result-sizing metrics (v0.41.34.0 autocut)
+  // Result-sizing metrics (v0.42.3.0 autocut)
   // ────────────────────────────────────────────────────────────────────────
   'autocut.signal': Object.freeze({
     industry_term: 'Autocut signal',

@@ -244,7 +244,7 @@ export interface ModeBundle {
   contextual_retrieval_disabled: boolean;
 
   /**
-   * v0.41.34.0 — autocut (score-discontinuity result-sizing). Default OFF for
+   * v0.42.3.0 — autocut (score-discontinuity result-sizing). Default OFF for
    * conservative (no reranker → no trustworthy cliff signal; would no-op
    * anyway), ON for balanced + tokenmax. When on AND a reranker scored ≥2
    * items, hybridSearch cuts the ranked set at the largest cross-encoder
@@ -254,7 +254,7 @@ export interface ModeBundle {
    */
   autocut: boolean;
   /**
-   * v0.41.34.0 — autocut sensitivity: the minimum normalized score gap (as a
+   * v0.42.3.0 — autocut sensitivity: the minimum normalized score gap (as a
    * fraction of the top score) that counts as a cliff. Default 0.20. Lower =
    * cuts more aggressively (tighter sets); higher = only cuts on dramatic
    * cliffs. Eval-derived starting point, calibrated by the PrecisionMemBench
@@ -306,7 +306,7 @@ export const MODE_BUNDLES: Readonly<Record<SearchMode, Readonly<ModeBundle>>> = 
     // v0.40.3.0 contextual retrieval — none for conservative (minimum surface).
     contextual_retrieval: 'none' as CRMode,
     contextual_retrieval_disabled: false,
-    // v0.41.34.0 — autocut OFF: conservative has no reranker, so no trustworthy
+    // v0.42.3.0 — autocut OFF: conservative has no reranker, so no trustworthy
     // cliff signal exists (autocut would no-op). Explicit for clarity.
     autocut: false,
     autocut_jump: 0.2,
@@ -329,7 +329,7 @@ export const MODE_BUNDLES: Readonly<Record<SearchMode, Readonly<ModeBundle>>> = 
     // `gbrain config set search.reranker.enabled false`.
     reranker_enabled: true,
     reranker_model: 'zeroentropyai:zerank-2',
-    // v0.41.34.0 D4: topNIn = searchLimit (25) so the cross-encoder scores
+    // v0.42.3.0 D4: topNIn = searchLimit (25) so the cross-encoder scores
     // every result the limit slice will return — no unscored tail for autocut
     // to wrongly drop (Codex #2). Was 30; tracking searchLimit is the
     // correctness precondition for autocut.
@@ -361,7 +361,7 @@ export const MODE_BUNDLES: Readonly<Record<SearchMode, Readonly<ModeBundle>>> = 
     // per the cost-tier philosophy.
     contextual_retrieval: 'title' as CRMode,
     contextual_retrieval_disabled: false,
-    // v0.41.34.0 — autocut ON (reranker fires; cliff signal is trustworthy).
+    // v0.42.3.0 — autocut ON (reranker fires; cliff signal is trustworthy).
     autocut: true,
     autocut_jump: 0.2,
   }),
@@ -380,7 +380,7 @@ export const MODE_BUNDLES: Readonly<Record<SearchMode, Readonly<ModeBundle>>> = 
     // tier's $700/mo @ Opus pairing per CLAUDE.md cost matrix.
     reranker_enabled: true,
     reranker_model: 'zeroentropyai:zerank-2',
-    // v0.41.34.0 D4: topNIn = searchLimit (50) so every returned result is
+    // v0.42.3.0 D4: topNIn = searchLimit (50) so every returned result is
     // cross-encoder scored — closes the Codex #2 recall gap where autocut
     // would drop the deliberately-preserved un-reranked tail (results 31-50).
     // Was 30. Reranking 50 docs vs 30 is cheap vs the downstream LLM.
@@ -409,7 +409,7 @@ export const MODE_BUNDLES: Readonly<Record<SearchMode, Readonly<ModeBundle>>> = 
     // 10K-page brain; documented in the post-upgrade cost prompt.
     contextual_retrieval: 'per_chunk_synopsis' as CRMode,
     contextual_retrieval_disabled: false,
-    // v0.41.34.0 — autocut ON.
+    // v0.42.3.0 — autocut ON.
     autocut: true,
     autocut_jump: 0.2,
   }),
@@ -460,7 +460,7 @@ export interface SearchKeyOverrides {
   // v0.40.3.0 contextual retrieval. CRMode override + soft kill switch.
   contextual_retrieval?: CRMode;
   contextual_retrieval_disabled?: boolean;
-  // v0.41.34.0 — autocut overrides.
+  // v0.42.3.0 — autocut overrides.
   autocut?: boolean;
   autocut_jump?: number;
 }
@@ -503,7 +503,7 @@ export interface SearchPerCallOpts {
   // v0.40.3.0 contextual retrieval per-call overrides.
   contextual_retrieval?: CRMode;
   contextual_retrieval_disabled?: boolean;
-  // v0.41.34.0 — autocut per-call overrides. NOTE: the boolean per-call
+  // v0.42.3.0 — autocut per-call overrides. NOTE: the boolean per-call
   // autocut toggle from SearchOpts is handled at the hybrid.ts boundary
   // (it's an AutocutInput, not a plain bool here); autocut_jump is the
   // numeric per-call knob threaded through the bundle.
@@ -598,7 +598,7 @@ export function resolveSearchMode(input: ResolveSearchModeInput): ResolvedSearch
     // v0.40.3.0 contextual retrieval — resolved via the same pick chain.
     contextual_retrieval: pick('contextual_retrieval'),
     contextual_retrieval_disabled: pick('contextual_retrieval_disabled'),
-    // v0.41.34.0 — autocut resolved via the same pick chain.
+    // v0.42.3.0 — autocut resolved via the same pick chain.
     autocut: pick('autocut'),
     autocut_jump: pick('autocut_jump'),
     resolved_mode,
@@ -692,7 +692,7 @@ export function attributeKnob<K extends keyof ModeBundle>(
 // must NOT be served to a title-boost-off lookup (ranking shifts). Same
 // one-time miss-spike pattern; fills within cache.ttl_seconds.
 //
-// v0.41.34.0 bump 7→8: autocut (score-discontinuity result-sizing) adds `ac`
+// v0.42.3.0 bump 7→8: autocut (score-discontinuity result-sizing) adds `ac`
 // + `acj` parts. Default-ON in reranked modes trims the returned set, so an
 // autocut-on write must NOT be served to an autocut-off lookup. ONE-TIME
 // global cache cold-miss on upgrade — EVERY query_cache row invalidates,
@@ -796,7 +796,7 @@ export function knobsHash(
     `crd=${knobs.contextual_retrieval_disabled ? 1 : 0}`,
     // v=7 addition (append-only) — T2 title-phrase boost (retrieval-maxpool).
     `tib=${knobs.title_boost === undefined ? 'none' : knobs.title_boost.toFixed(4)}`,
-    // v=8 additions (v0.41.34.0, append-only): autocut. An autocut-on write
+    // v=8 additions (v0.42.3.0, append-only): autocut. An autocut-on write
     // (trimmed result set) must not be served to an autocut-off lookup, and a
     // sensitivity change (jumpRatio) shifts where the cut lands. Conservative
     // (autocut off) hashes differently from balanced/tokenmax (autocut on),
@@ -960,7 +960,7 @@ export function loadOverridesFromConfig(
     out.graph_signals = gs === '1' || gs.toLowerCase() === 'true';
   }
 
-  // v0.41.34.0 — autocut. `search.autocut` is the master toggle (the ceiling
+  // v0.42.3.0 — autocut. `search.autocut` is the master toggle (the ceiling
   // override agents use to force the full top-K); `search.autocut_jump` tunes
   // sensitivity (clamped to (0, 1] — out-of-range falls through to the bundle).
   const ac = get('search.autocut');
@@ -1009,7 +1009,7 @@ export const SEARCH_MODE_CONFIG_KEYS: ReadonlyArray<string> = Object.freeze([
   // override at the per-key level without flipping the global mode.
   'search.contextual_retrieval',
   'search.contextual_retrieval_disabled',
-  // v0.41.34.0 autocut
+  // v0.42.3.0 autocut
   'search.autocut',
   'search.autocut_jump',
 ]);

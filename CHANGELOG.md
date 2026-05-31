@@ -2,7 +2,7 @@
 
 All notable changes to GBrain will be documented in this file.
 
-## [0.42.2.0] - 2026-05-30
+## [0.42.3.0] - 2026-05-30
 
 **Search now returns the *confident handful* instead of a fixed wall of results
 — automatically. When you ask something with one clear answer, you get one
@@ -109,7 +109,7 @@ scores come back flat (no cliff) — autocut declines and you get the full set.
   through, so `--explain` and eval-capture report the real decision on cache
   writeback and hits.
 - `rerank_score` is now a first-class field on search results.
-- Cache-key version bumped (6 → 7) to fold in the autocut knobs.
+- Cache-key version bumped (7 → 8) to fold in the autocut knobs (stacked on master's title_boost v=7).
 - **In-repo eval gate** (`bun run eval:autocut`, also runs in CI) measures the
   precision-lift-without-recall-regression claim default-ON rests on, over
   labeled qrels fixtures with realistic cross-encoder score distributions — no

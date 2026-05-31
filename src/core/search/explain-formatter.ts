@@ -87,7 +87,7 @@ export function formatResultExplain(
     const arrow = result.reranker_delta > 0 ? '↑' : '↓';
     lines.push(`   ${arrow} reranker rank ${result.reranker_delta > 0 ? '+' : ''}${result.reranker_delta}`);
   }
-  // v0.41.34.0 — show the cross-encoder rerank score (the signal autocut cuts
+  // v0.42.3.0 — show the cross-encoder rerank score (the signal autocut cuts
   // on). Surfacing it per result makes the autocut cliff legible: every kept
   // result sits at or above the cut threshold.
   if (result.rerank_score !== undefined) {
@@ -104,7 +104,7 @@ export function formatResultExplain(
 }
 
 /**
- * v0.41.34.0 — one-line autocut summary for `--explain`. Returns null when
+ * v0.42.3.0 — one-line autocut summary for `--explain`. Returns null when
  * autocut didn't run (no decision in meta) so callers can omit it cleanly.
  */
 export function formatAutocutSummary(decision: AutocutDecision | undefined): string | null {
@@ -126,7 +126,7 @@ export function formatResultsExplain(
 ): string {
   if (results.length === 0) return 'No results.\n';
   const body = results.map((r, i) => formatResultExplain(r, i + 1)).join('\n\n') + '\n';
-  // v0.41.34.0 — prepend the autocut summary when meta carries a decision.
+  // v0.42.3.0 — prepend the autocut summary when meta carries a decision.
   const autocutLine = formatAutocutSummary(meta?.autocut);
   return autocutLine ? `${autocutLine}\n\n${body}` : body;
 }

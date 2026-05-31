@@ -1,5 +1,5 @@
 /**
- * v0.41.34.0 — autocut precision/recall eval gate (in-repo, hermetic).
+ * v0.42.3.0 — autocut precision/recall eval gate (in-repo, hermetic).
  *
  * This is the D2 precondition for default-ON, runnable in CI without the
  * sibling gbrain-evals repo and without any API key. It measures the EXACT

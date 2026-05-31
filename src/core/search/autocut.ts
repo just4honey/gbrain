@@ -1,5 +1,5 @@
 /**
- * autocut.ts — score-discontinuity result-sizing on the rerank separatrix (v0.41.34.0).
+ * autocut.ts — score-discontinuity result-sizing on the rerank separatrix (v0.42.3.0).
  *
  * Weaviate-style "autocut": instead of returning a fixed top-K (noisy), cut the
  * ranked list where the score curve breaks. Returns 1 when the answer is obvious,

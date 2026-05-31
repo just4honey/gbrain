@@ -1,5 +1,5 @@
 /**
- * v0.41.34.0 — autocut end-to-end through hybridSearch (the IRON-RULE
+ * v0.42.3.0 — autocut end-to-end through hybridSearch (the IRON-RULE
  * behavioral regression).
  *
  * Drives bare hybridSearch against PGLite with a stubbed rerankerFn so we

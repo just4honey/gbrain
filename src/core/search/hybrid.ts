@@ -664,7 +664,7 @@ export async function hybridSearch(
       // override wins over mode bundle. Without this thread the eval gate
       // would be a no-op (both branches resolve to the same mode default).
       graph_signals: opts?.graph_signals,
-      // v0.41.34.0 — autocut per-call enable (boolean ceiling override).
+      // v0.42.3.0 — autocut per-call enable (boolean ceiling override).
       // `false` forces the full top-K; per-call wins over config + bundle.
       // Non-boolean AutocutInput shapes (Partial) aren't a v1 per-call surface,
       // so only the boolean toggle threads here.
@@ -1256,7 +1256,7 @@ export async function hybridSearch(
     adaptiveDecision = r.decision;
   }
 
-  // v0.41.34.0 — autocut (score-discontinuity result-sizing). The floor:
+  // v0.42.3.0 — autocut (score-discontinuity result-sizing). The floor:
   // default-ON in reranked modes (resolvedMode.autocut, resolved per-call >
   // config > bundle like every other knob). Cuts the ranked set at the largest
   // cross-encoder rerank-score cliff, BEFORE the limit slice, first page only.
@@ -1361,7 +1361,7 @@ export async function hybridSearchCached(
       // override would write to one cache row but read from a different
       // one on the next call.
       graph_signals: opts?.graph_signals,
-      // v0.41.34.0 — autocut threaded through the cache resolver so the
+      // v0.42.3.0 — autocut threaded through the cache resolver so the
       // knobsHash `ac=` bit reflects the per-call ceiling override. Without
       // this, an `autocut:false` (full top-K) call could be served a trimmed
       // autocut-on cache row, or vice versa.
@@ -1515,7 +1515,7 @@ export async function hybridSearchCached(
   // Token budget pass (no-op when not set).
   const { results: budgeted, meta: budgetMeta } = enforceTokenBudget(results, opts?.tokenBudget);
 
-  // Compose the final meta and emit. v0.41.34.0 (Codex #5): carry over the
+  // Compose the final meta and emit. v0.42.3.0 (Codex #5): carry over the
   // inner meta's decision fields — pre-fix this manual rebuild silently dropped
   // adaptive_return (and would drop autocut), so cached writeback/hit paths and
   // eval-capture under-reported the feature. Propagate mode + embedding_column

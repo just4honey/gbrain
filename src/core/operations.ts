@@ -1388,7 +1388,7 @@ const query: Operation = {
     autocut: {
       type: 'boolean',
       description:
-        "v0.41.34.0 — autocut is the SMART DEFAULT (already ON when the reranker runs, which it does in the default search mode). It returns only the confident cluster by cutting where the relevance score drops off a cliff, so an obvious single answer comes back as 1 result and a genuine handful comes back as that handful — not a fixed wall of 20+.\n" +
+        "v0.42.3.0 — autocut is the SMART DEFAULT (already ON when the reranker runs, which it does in the default search mode). It returns only the confident cluster by cutting where the relevance score drops off a cliff, so an obvious single answer comes back as 1 result and a genuine handful comes back as that handful — not a fixed wall of 20+.\n" +
         "  You almost never set this. Pass FALSE only to FORCE the full top-K when you deliberately want breadth — broad exploration, 'show me everything about X', enumeration where you'd rather over-collect and judge for yourself, or when you suspect the top hit is wrong and want to see the alternatives.\n" +
         "  TRUE is redundant in default mode (it's already on); it only matters to override a brain whose config turned autocut off.\n" +
         "Safe by construction: never returns empty when there are matches, only applies to the first page (omit when paginating), and is a no-op when no reranker scored the results (so it can't cut on an untrustworthy signal). Distinct from `adaptive_return`: autocut cuts on the score cliff; adaptive_return caps by question intent. Leave both unset for the smart default.",
@@ -1487,7 +1487,7 @@ const query: Operation = {
       // v0.41.33 — agent-explicit adaptive return-sizing. Omitted = off
       // (config default applies). hybridSearchCached skips the cache when on.
       adaptiveReturn: typeof p.adaptive_return === 'boolean' ? (p.adaptive_return as boolean) : undefined,
-      // v0.41.34.0 — autocut ceiling override. Omitted = smart default (ON in
+      // v0.42.3.0 — autocut ceiling override. Omitted = smart default (ON in
       // reranked modes). `false` forces the full top-K.
       autocut: typeof p.autocut === 'boolean' ? (p.autocut as boolean) : undefined,
     });

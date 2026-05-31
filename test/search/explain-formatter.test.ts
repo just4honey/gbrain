@@ -200,7 +200,7 @@ describe('formatResultExplain — number formatting', () => {
   });
 });
 
-describe('v0.41.34.0 — autocut in --explain', () => {
+describe('v0.42.3.0 — autocut in --explain', () => {
   test('rerank_score renders per result (the cliff signal)', () => {
     const out = formatResultExplain(r('a/b', 1.2, { rerank_score: 0.87 }), 1);
     expect(out).toContain('rerank score=0.87');

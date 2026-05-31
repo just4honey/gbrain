@@ -647,7 +647,7 @@ export interface SearchResult {
   reranker_delta?: number;
   /** Raw cross-encoder relevance score stamped by applyReranker on the
    *  reranked head (undefined when no reranker fired). Distinct from `score`
-   *  (RRF + boosts). v0.41.34.0 autocut cuts on this — the trustworthy
+   *  (RRF + boosts). v0.42.3.0 autocut cuts on this — the trustworthy
    *  separatrix — never on RRF/cosine. */
   rerank_score?: number;
   /**
@@ -769,7 +769,7 @@ export interface SearchOpts {
    */
   adaptiveReturn?: import('./search/return-policy.ts').AdaptiveReturnInput;
   /**
-   * v0.41.34.0 — autocut (score-discontinuity result-sizing). Default-ON in
+   * v0.42.3.0 — autocut (score-discontinuity result-sizing). Default-ON in
    * reranked modes (the floor). Pass `false` to force the full top-K for breadth
    * / exploration (the ceiling override). Cuts the ranked set at the largest
    * cross-encoder rerank-score cliff; no-op without a reranker. Only fires when
@@ -1312,7 +1312,7 @@ export interface HybridSearchMeta {
    */
   adaptive_return?: import('./search/return-policy.ts').AdaptiveReturnDecision;
   /**
-   * v0.41.34.0 — autocut decision (signal, cut point, kept/total, gapRatio).
+   * v0.42.3.0 — autocut decision (signal, cut point, kept/total, gapRatio).
    * Omitted when autocut didn't run (no reranker). Surfaced for
    * `gbrain search --explain`.
    */

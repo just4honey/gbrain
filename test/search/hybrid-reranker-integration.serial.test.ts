@@ -167,7 +167,7 @@ describe('hybridSearch — reranker enabled (reorder)', () => {
 
     // Now rerank only the top 2 (swap them); the tail (indices 2..N-1)
     // must keep its baseline order.
-    // v0.41.34.0: autocut is default-ON in balanced mode and would cut this
+    // v0.42.3.0: autocut is default-ON in balanced mode and would cut this
     // artificial 2-item scored head (0.99 vs 0.5 is a cliff) down to 1,
     // dropping the un-scored tail. This test isolates RERANKER tail mechanics,
     // so disable autocut here — in real balanced mode top_n_in = searchLimit
