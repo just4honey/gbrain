@@ -157,6 +157,47 @@ describe('applyAutocut — failsafe', () => {
   });
 });
 
+describe('applyAutocut — preserve predicate (Codex P1: alias-injected matches)', () => {
+  // An alias-hop exact match is injected AFTER reranking, so it has no score.
+  type AR = { id: string; rs?: number; alias?: boolean };
+  const arScore = (r: AR) => r.rs;
+  const isAlias = (r: AR) => r.alias === true;
+
+  test('unscored alias item survives a cut that drops scored noise', () => {
+    const items: AR[] = [
+      { id: 'alias', alias: true }, // injected, no rerank_score
+      { id: 'top', rs: 0.95 },
+      { id: 'noise1', rs: 0.2 },
+      { id: 'noise2', rs: 0.1 },
+    ];
+    const r = applyAutocut(items, arScore, ON, isAlias);
+    // Cliff after 'top' drops noise1/noise2; 'alias' is preserved despite no score.
+    expect(r.kept.map((x) => x.id).sort()).toEqual(['alias', 'top']);
+    expect(r.decision.applied).toBe(true);
+  });
+
+  test('without the predicate, the unscored alias item is dropped on a cut', () => {
+    const items: AR[] = [
+      { id: 'alias', alias: true },
+      { id: 'top', rs: 0.95 },
+      { id: 'noise', rs: 0.1 },
+    ];
+    const r = applyAutocut(items, arScore, ON); // no preserve
+    expect(r.kept.map((x) => x.id)).toEqual(['top']);
+  });
+
+  test('preserve does not force a cut on a flat curve (no-op still returns all)', () => {
+    const items: AR[] = [
+      { id: 'alias', alias: true },
+      { id: 'a', rs: 0.6 },
+      { id: 'b', rs: 0.58 },
+    ];
+    const r = applyAutocut(items, arScore, ON, isAlias);
+    expect(r.decision.applied).toBe(false);
+    expect(r.kept.length).toBe(3);
+  });
+});
+
 describe('autocutFromConfig', () => {
   test('reads search.autocut + search.autocut_jump', () => {
     const out = autocutFromConfig({ search: { autocut: false, autocut_jump: 0.4 } });

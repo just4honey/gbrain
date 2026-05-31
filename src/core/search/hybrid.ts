@@ -1269,11 +1269,15 @@ export async function hybridSearch(
   // never-empty failsafe (1); jumpRatio comes from the resolved mode.
   let autocutDecision: AutocutDecision | undefined;
   if (resolvedMode.autocut && offset === 0) {
-    const r = applyAutocut(returnPool, (x) => x.rerank_score, {
-      enabled: true,
-      jumpRatio: resolvedMode.autocut_jump,
-      minKeep: 1,
-    });
+    const r = applyAutocut(
+      returnPool,
+      (x) => x.rerank_score,
+      { enabled: true, jumpRatio: resolvedMode.autocut_jump, minKeep: 1 },
+      // Preserve alias-hop exact matches: applyAliasHop injects the canonical
+      // page AFTER reranking, so it has no rerank_score. Without this it would
+      // be dropped whenever autocut cuts on the scored set (Codex P1).
+      (x) => x.alias_hit === true,
+    );
     returnPool = r.kept;
     autocutDecision = r.decision;
   }
@@ -1472,6 +1476,13 @@ export async function hybridSearchCached(
           similarity: cacheSimilarity,
           age_seconds: cacheAge,
         },
+        // Carry the trimmed-set decision fields from the cached row so cache
+        // HITS report the same autocut/adaptive/mode/column meta as a fresh
+        // run (Codex P2 — the cached result set was already trimmed).
+        ...(hit.meta?.mode ? { mode: hit.meta.mode } : {}),
+        ...(hit.meta?.embedding_column ? { embedding_column: hit.meta.embedding_column } : {}),
+        ...(hit.meta?.adaptive_return ? { adaptive_return: hit.meta.adaptive_return } : {}),
+        ...(hit.meta?.autocut ? { autocut: hit.meta.autocut } : {}),
         ...(opts?.tokenBudget && opts.tokenBudget > 0
           ? { token_budget: budgetMeta }
           : {}),

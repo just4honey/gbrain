@@ -135,6 +135,15 @@ export function applyAutocut<T>(
   results: T[],
   scoreOf: (r: T) => number | undefined | null,
   cfg: AutocutConfig,
+  /**
+   * Optional always-keep predicate. Items where `preserve(r)` is true survive
+   * the cut regardless of score (and are NOT required to carry a finite score).
+   * Used to protect structurally-injected high-confidence results that bypass
+   * reranking — e.g. an exact alias-hop match (`alias_hit === true`) inserted
+   * after the reranker ran, which therefore has no `rerank_score`. Without this,
+   * autocut would drop the alias-injected page when it cuts on the scored set.
+   */
+  preserve?: (r: T) => boolean,
 ): { kept: T[]; decision: AutocutDecision } {
   if (!cfg.enabled || results.length < 2) return noOp(results);
 
@@ -184,9 +193,12 @@ export function applyAutocut<T>(
   }
 
   // Cut threshold = the score at the cut boundary. Keep every item scored at or
-  // above it (ties at the boundary stay together — conservative, never-empty).
+  // above it (ties at the boundary stay together — conservative, never-empty),
+  // PLUS any item the caller marked preserve (alias-injected exact matches that
+  // bypassed reranking and carry no score).
   const threshold = sorted[bestIdx];
   const kept = results.filter((r) => {
+    if (preserve?.(r)) return true;
     const s = scoreOf(r);
     return typeof s === 'number' && Number.isFinite(s) && s >= threshold;
   });
