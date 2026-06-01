@@ -1659,6 +1659,11 @@ const think: Operation = {
       save: safeSave,
       take: safeTake,
       model: p.model ? String(p.model) : undefined,
+      // #1698 (C3): a remote caller that explicitly supplies a model gets the same
+      // hard-error-on-unresolvable behavior as the CLI (loud op error envelope),
+      // instead of silently degrading to a no-LLM stub answer. No model param →
+      // false → configured/default model keeps its graceful path.
+      modelExplicit: !!p.model,
       since: p.since ? String(p.since) : undefined,
       until: p.until ? String(p.until) : undefined,
       takesHoldersAllowList: ctx.takesHoldersAllowList,
@@ -1679,7 +1684,9 @@ const think: Operation = {
 
     return {
       ...result,
-      saved_slug: savedSlug ?? null,
+      // #1698 (#10): the persist-skip signal returns slug '' — map it (and any
+      // falsy) to null so callers never see an empty-string "slug".
+      saved_slug: savedSlug || null,
       evidence_inserted: evidenceInserted,
       remote_persisted_blocked: remote && (Boolean(p.save) || Boolean(p.take)),
     };
