@@ -2,7 +2,7 @@
 
 All notable changes to GBrain will be documented in this file.
 
-## [0.42.13.0] - 2026-06-03
+## [0.42.18.0] - 2026-06-03
 
 **A scheduled `gbrain sync` can no longer spin forever and pile up dead processes, and `gbrain doctor` stops showing "100% of pages need link extraction" right after you ran the thing that's supposed to fix it.**
 
@@ -18,7 +18,7 @@ The fix is a watchdog that runs on a separate OS thread and kills the process fr
 
 The second fix: on Postgres, `gbrain doctor`'s `links_extraction_lag` check was permanently stuck at 100%. You'd run `gbrain extract --stale`, it would stamp every page as extracted, and the check would still say every page needs extraction. The stamp was being truncated to millisecond precision while the database kept microseconds, so "last extracted" always looked a hair older than "last updated." Now the stamp carries full microsecond precision and the check clears the moment extraction runs. (Postgres-only; the health score stops being dragged down by a check that could never pass.)
 
-## To take advantage of v0.42.13.0
+## To take advantage of v0.42.18.0
 
 `gbrain upgrade` is all that's required — both fixes are automatic. Two things worth knowing:
 
