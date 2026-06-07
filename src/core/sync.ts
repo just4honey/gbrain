@@ -390,12 +390,18 @@ export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${SLUGIFY_KEEP_CHARS
 const SLUGIFY_KEEP_RE = new RegExp(`[^a-z0-9.\\s_\\-${SLUGIFY_KEEP_CHARS}]`, 'g');
 
 export function slugifySegment(segment: string): string {
-  return segment
+  // Pre-protect Cyrillic decomposable chars (й→и is destructive)
+  // These chars decompose via NFD into a base + combining mark, and the
+  // combining-mark strip then removes the distinguishing feature.
+  const protected_ = segment.replace(/ё/g, 'e_cyr_yo').replace(/й/g, 'i_cyr_short');
+  return protected_
     .normalize('NFD')                     // Decompose accented chars
     .replace(/[\u0300-\u036f]/g, '')      // Strip accent marks
     .normalize('NFC')                     // Recompose Hangul Jamo back to Syllables (v0.32.7)
     .toLowerCase()
-    .replace(SLUGIFY_KEEP_RE, '')         // Keep alnum, dots, spaces, _-, and CJK (v0.32.7)
+    .replace(/e_cyr_yo/g, 'ё')            // Restore ё
+    .replace(/i_cyr_short/g, 'й')         // Restore й
+    .replace(SLUGIFY_KEEP_RE, '')         // Keep alnum, dots, spaces, _-, and CJK + Cyrillic
     .replace(/[\s]+/g, '-')              // Spaces → hyphens
     .replace(/-+/g, '-')                 // Collapse multiple hyphens
     .replace(/^-|-$/g, '');              // Strip leading/trailing hyphens
