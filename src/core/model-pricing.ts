@@ -81,6 +81,8 @@ export const CANONICAL_PRICING: Record<string, ModelPricing> = {
   // ── Together / DeepSeek (cross-modal-eval panel) ───────────────────────
   'together:meta-llama/Llama-3.3-70B-Instruct-Turbo': { input: 0.88, output: 0.88 },
   'deepseek:deepseek-chat':               { input:  0.14, output:  0.28 },
+  'deepseek:deepseek-v4-flash':           { input:  0.15, output:  0.60 },
+  'deepseek:deepseek-v4-pro':             { input:  2.00, output:  8.00 },
 };
 
 /**
