@@ -74,7 +74,7 @@ if [ -n "$UPSTREAM_HASH" ] && [ "$UPSTREAM_HASH" != "$LOCAL" ]; then
     git checkout -b "$RELEASE_BRANCH" "$UPSTREAM_HASH"
 
     # --- Step A: Apply patches to upstream files ---
-    for pf in "$PATCHES_DIR"/0001-*.patch "$PATCHES_DIR"/0002-*.patch "$PATCHES_DIR"/0004-*.patch; do
+    for pf in "$PATCHES_DIR"/0001-*.patch "$PATCHES_DIR"/0002-*.patch "$PATCHES_DIR"/0004-*.patch "$PATCHES_DIR"/0006-*.patch; do
       [ -f "$pf" ] || continue
       pname=$(basename "$pf")
       echo "  Applying $pname..."

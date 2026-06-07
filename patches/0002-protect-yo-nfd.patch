@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: just4honey <j4f@list.ru>
+Date: Sun, 7 Jun 2026 12:25:42 +0300
+Subject: [PATCH 2/6] =?UTF-8?q?fix:=20protect=20Cyrillic=20=D0=B9/=D1=91?=
+ =?UTF-8?q?=20from=20NFD=20decomposition=20in=20slugify?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+NFD normalization decomposes й→и+breve and ё→е+diaeresis, then the
+combining-mark strip removes the distinguishing mark, turning й into
+и and ё into е. Pre-protect these chars before NFD and restore after.
+
+just4honey/gbrain fork — local patch.
+---
+ src/core/sync.ts | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/sync.ts b/src/core/sync.ts
+index 932affe2..092aefeb 100644
+--- a/src/core/sync.ts
++++ b/src/core/sync.ts
+@@ -390,12 +390,18 @@ export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${SLUGIFY_KEEP_CHARS
+ const SLUGIFY_KEEP_RE = new RegExp(`[^a-z0-9.\\s_\\-${SLUGIFY_KEEP_CHARS}]`, 'g');
+ 
+ export function slugifySegment(segment: string): string {
+-  return segment
++  // Pre-protect Cyrillic decomposable chars (й→и is destructive)
++  // These chars decompose via NFD into a base + combining mark, and the
++  // combining-mark strip then removes the distinguishing feature.
++  const protected_ = segment.replace(/ё/g, 'e_cyr_yo').replace(/й/g, 'i_cyr_short');
++  return protected_
+     .normalize('NFD')                     // Decompose accented chars
+     .replace(/[\u0300-\u036f]/g, '')      // Strip accent marks
+     .normalize('NFC')                     // Recompose Hangul Jamo back to Syllables (v0.32.7)
+     .toLowerCase()
+-    .replace(SLUGIFY_KEEP_RE, '')         // Keep alnum, dots, spaces, _-, and CJK (v0.32.7)
++    .replace(/e_cyr_yo/g, 'ё')            // Restore ё
++    .replace(/i_cyr_short/g, 'й')         // Restore й
++    .replace(SLUGIFY_KEEP_RE, '')         // Keep alnum, dots, spaces, _-, and CJK + Cyrillic
+     .replace(/[\s]+/g, '-')              // Spaces → hyphens
+     .replace(/-+/g, '-')                 // Collapse multiple hyphens
+     .replace(/^-|-$/g, '');              // Strip leading/trailing hyphens
+-- 
+2.43.0
+

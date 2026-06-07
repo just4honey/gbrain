@@ -1,0 +1,259 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: just4honey <j4f@list.ru>
+Date: Sun, 7 Jun 2026 12:24:02 +0300
+Subject: [PATCH 1/6] feat: add Cyrillic support to slugification
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Extend SLUGIFY_KEEP_RE and SLUG_SEGMENT_PATTERN with Cyrillic
+range U+0400-U+04FF so files with Cyrillic names produce
+non-empty slugs (e.g. Инфосэл → инфосэл).
+
+just4honey/gbrain fork — local patch.
+---
+ gbrain-weekly-upgrade.sh | 155 +++++++++++++++++++++++++++++++++++++++
+ run-gbrain.sh            |  16 ++++
+ src/core/cjk.ts          |   9 +++
+ src/core/sync.ts         |   6 +-
+ 4 files changed, 183 insertions(+), 3 deletions(-)
+ create mode 100755 gbrain-weekly-upgrade.sh
+ create mode 100755 run-gbrain.sh
+
+diff --git a/gbrain-weekly-upgrade.sh b/gbrain-weekly-upgrade.sh
+new file mode 100755
+index 00000000..1d7e5e0a
+--- /dev/null
++++ b/gbrain-weekly-upgrade.sh
+@@ -0,0 +1,155 @@
++#!/usr/bin/env bash
++# GBrain weekly upgrade & health check
++# Runs every Sunday at 0300 UTC
++set -euo pipefail
++
++GBRAIN_DIR="$HOME/apps/tools/gbrain"
++ENV_FILE="$HOME/.gbrain/env"
++LOG_FILE="/tmp/gbrain-weekly-upgrade.log"
++
++exec > "$LOG_FILE" 2>&1
++
++echo "=== GBrain Weekly Upgrade: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
++echo ""
++
++# ---- 1. Load env ----
++source "$ENV_FILE"
++
++# ---- 2. Capture pre-upgrade state ----
++cd "$GBRAIN_DIR"
++PRE_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
++PRE_COMMIT=$(git rev-parse HEAD)
++echo "Current version: $PRE_VERSION"
++echo "Current commit:  $PRE_COMMIT"
++echo ""
++
++# Stash any local changes so they don't block pull
++if [ -n "$(git status --porcelain)" ]; then
++  echo "⚠️  Local changes detected, stashing..."
++  git stash push -m "gbrain-weekly-auto-stash $(date -u '+%Y-%m-%d')"
++  STASHED=true
++else
++  STASHED=false
++fi
++
++# ---- 3. Check for update ----
++echo "=== Checking for updates ==="
++git fetch origin 2>&1 || { echo "❌ git fetch failed"; exit 1; }
++
++LOCAL=$(git rev-parse HEAD)
++REMOTE=$(git rev-parse @{upstream} 2>/dev/null || echo "")
++
++if [ "$LOCAL" = "$REMOTE" ] || [ -z "$REMOTE" ]; then
++  echo "Already up-to-date ($PRE_VERSION @ $PRE_COMMIT)."
++  echo ""
++  echo "=== Running health check (no update needed) ==="
++else
++  echo "Update available: $LOCAL -> $REMOTE"
++  echo ""
++  echo "=== Running upgrade ==="
++  
++  # Pull (uses upstream tracking: origin/master)
++  if git pull --ff-only 2>&1; then
++    echo "✅ git pull succeeded"
++  else
++    echo "❌ git pull failed"
++    # Rollback
++    echo "=== Rolling back ==="
++    git reset --hard "$PRE_COMMIT"
++    if [ "$STASHED" = true ]; then
++      git stash pop || true
++    fi
++    exit 1
++  fi
++  
++  # Install deps
++  echo "Running bun install..."
++  if bun install 2>&1; then
++    echo "✅ bun install succeeded"
++  else
++    echo "❌ bun install failed, rolling back..."
++    git reset --hard "$PRE_COMMIT"
++    if [ "$STASHED" = true ]; then
++      git stash pop || true
++    fi
++    exit 1
++  fi
++  
++  NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
++  NEW_COMMIT=$(git rev-parse HEAD)
++  echo ""
++  echo "Upgraded: $PRE_VERSION ($PRE_COMMIT) → $NEW_VERSION ($NEW_COMMIT)"
++  
++  # Run DB migrations
++  echo ""
++  echo "=== Running DB migrations ==="
++  if gbrain apply-migrations --yes 2>&1; then
++    echo "✅ Migrations applied"
++  else
++    echo "⚠️  apply-migrations failed, trying gbrain upgrade..."
++    if gbrain upgrade 2>&1; then
++      echo "✅ gbrain upgrade completed"
++      NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
++      echo "Final version: $NEW_VERSION"
++    else
++      echo "❌ gbrain upgrade also failed, rolling back..."
++      git reset --hard "$PRE_COMMIT"
++      bun install 2>&1
++      if [ "$STASHED" = true ]; then
++        git stash pop || true
++      fi
++      exit 1
++    fi
++  fi
++fi
++
++# ---- 4. Health check ----
++echo ""
++echo "=== Health check (gbrain doctor) ==="
++# Run doctor, capture all warnings/errors
++DOCTOR_OUTPUT=$(gbrain doctor 2>&1) || true
++echo "$DOCTOR_OUTPUT"
++
++# Count failures
++FAIL_COUNT=$(echo "$DOCTOR_OUTPUT" | grep -c "\[FAIL\]" || true)
++WARN_COUNT=$(echo "$DOCTOR_OUTPUT" | grep -c "\[WARN\]" || true)
++echo ""
++echo "Health summary: $FAIL_COUNT FAIL, $WARN_COUNT WARN"
++
++# ---- 5. Verify sync still works ----
++echo ""
++echo "=== Sync verification ==="
++SYNC_OUTPUT=$(gbrain sync --skip-failed --no-pull --repo "$HOME/apps/Obsidian/myVault" --no-embed 2>&1) || true
++echo "$SYNC_OUTPUT" | tail -10
++
++if echo "$SYNC_OUTPUT" | grep -qi "error\|fail"; then
++  echo "⚠️  Sync reported issues (non-critical)"
++fi
++
++# ---- 6. Status summary ----
++echo ""
++echo "=== Final status ==="
++FINAL_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
++FINAL_COMMIT=$(git rev-parse HEAD)
++
++gbrain status 2>&1
++
++echo ""
++echo "=== Summary ==="
++echo "  Version: $PRE_VERSION → $FINAL_VERSION"
++if [ "$PRE_COMMIT" != "$FINAL_COMMIT" ]; then
++  echo "  Commit:  $PRE_COMMIT → $FINAL_COMMIT"
++  echo "  Result:  UPDATED ✅"
++else
++  echo "  Commit:  $PRE_COMMIT (unchanged)"
++  echo "  Result:  UP-TO-DATE ✅"
++fi
++echo "  Health:  $FAIL_COUNT failures, $WARN_COUNT warnings"
++
++# Restore stash if not rolled back
++if [ "$STASHED" = true ] && [ "$PRE_COMMIT" != "$FINAL_COMMIT" ] && [ "$(git rev-parse HEAD)" != "$PRE_COMMIT" ]; then
++  git stash pop || true
++fi
++
++echo ""
++echo "=== Done: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+diff --git a/run-gbrain.sh b/run-gbrain.sh
+new file mode 100755
+index 00000000..260752de
+--- /dev/null
++++ b/run-gbrain.sh
+@@ -0,0 +1,16 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++export BUN_INSTALL="$HOME/.bun"
++export PATH="$BUN_INSTALL/bin:$PATH"
++source "$HOME/.gbrain/env"
++
++VAULT="/home/just4honey/apps/Obsidian/myVault"
++
++# gbrain sync — использует git last_commit, импортирует только новые/изменённые файлы
++/home/just4honey/.local/bin/gbrain sync --skip-failed --no-pull --repo "$VAULT" --no-embed 2>&1
++
++# embed --stale — эмбеддит только чанки без эмбеддинга (реально новые)
++/home/just4honey/.local/bin/gbrain embed --stale 2>&1
++
++echo "[$(date '+%Y-%m-%d %H:%M:%S')] Done"
+diff --git a/src/core/cjk.ts b/src/core/cjk.ts
+index d9c53187..f5c42b82 100644
+--- a/src/core/cjk.ts
++++ b/src/core/cjk.ts
+@@ -18,6 +18,15 @@
+ 
+ export const CJK_SLUG_CHARS = '一-鿿぀-ゟ゠-ヿ가-힯';
+ 
++/**
++ * Characters preserved during slugification. Extends CJK with Cyrillic
++ * (Basic Cyrillic U+0400–U+04FF covers Russian, Ukrainian, Bulgarian, etc.)
++ * so files with Cyrillic names produce non-empty slugs.
++ *
++ * v0.42.15.0+ (just4honey fork) — Cyrillic range added.
++ */
++export const SLUGIFY_KEEP_CHARS = CJK_SLUG_CHARS + '\u0400-\u04FF';
++
+ export const CJK_RANGES_REGEX = new RegExp(`[${CJK_SLUG_CHARS}]`);
+ 
+ export const CJK_SENTENCE_DELIMITERS = ['。', '！', '？']; // 。！？
+diff --git a/src/core/sync.ts b/src/core/sync.ts
+index 6604343a..932affe2 100644
+--- a/src/core/sync.ts
++++ b/src/core/sync.ts
+@@ -11,7 +11,7 @@
+  *   pathToSlug()  →  convert file paths to page slugs
+  */
+ 
+-import { CJK_SLUG_CHARS } from './cjk.ts';
++import { CJK_SLUG_CHARS, SLUGIFY_KEEP_CHARS } from './cjk.ts';
+ // v0.37.7.0 #1169 submodule-detection helpers. Bottom-of-file already
+ // aliases existsSync as `_existsSync` for other purposes; the top-of-file
+ // import keeps the pruneDir helper's deps near its callsite.
+@@ -379,7 +379,7 @@ export function unsyncableReason(path: string, opts: SyncableOptions = {}): Sync
+  * Pattern is the inner character class only (no anchors); callers wrap it
+  * in `^...$` or compose it with prefixes like `(?:people|companies)/...`.
+  */
+-export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${CJK_SLUG_CHARS}]+`);
++export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${SLUGIFY_KEEP_CHARS}]+`);
+ 
+ /**
+  * Slugify a single path segment: lowercase, strip special chars, spaces → hyphens.
+@@ -387,7 +387,7 @@ export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${CJK_SLUG_CHARS}]+`
+  * NFC re-normalize after the NFD-strip-accents pass so Hangul Jamo recomposes back
+  * into precomposed syllables that fall inside the whitelist.
+  */
+-const SLUGIFY_KEEP_RE = new RegExp(`[^a-z0-9.\\s_\\-${CJK_SLUG_CHARS}]`, 'g');
++const SLUGIFY_KEEP_RE = new RegExp(`[^a-z0-9.\\s_\\-${SLUGIFY_KEEP_CHARS}]`, 'g');
+ 
+ export function slugifySegment(segment: string): string {
+   return segment
+-- 
+2.43.0
+

@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: just4honey <j4f@list.ru>
+Date: Sun, 7 Jun 2026 15:58:28 +0300
+Subject: [PATCH 6/6] patch: add pricing for deepseek-v4-flash and
+ deepseek-v4-pro
+
+---
+ src/core/model-pricing.ts | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/core/model-pricing.ts b/src/core/model-pricing.ts
+index db1e8854..278fed0f 100644
+--- a/src/core/model-pricing.ts
++++ b/src/core/model-pricing.ts
+@@ -81,6 +81,8 @@ export const CANONICAL_PRICING: Record<string, ModelPricing> = {
+   // ── Together / DeepSeek (cross-modal-eval panel) ───────────────────────
+   'together:meta-llama/Llama-3.3-70B-Instruct-Turbo': { input: 0.88, output: 0.88 },
+   'deepseek:deepseek-chat':               { input:  0.14, output:  0.28 },
++  'deepseek:deepseek-v4-flash':           { input:  0.15, output:  0.60 },
++  'deepseek:deepseek-v4-pro':             { input:  2.00, output:  8.00 },
+ };
+ 
+ /**
+-- 
+2.43.0
+
