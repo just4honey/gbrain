@@ -305,7 +305,8 @@ class ProposeTakesPhase extends BaseCyclePhase {
   ): Promise<{ summary: string; details: Record<string, unknown>; status?: PhaseStatus }> {
     const extractor = opts.extractor ?? defaultExtractor;
     const promptVersion = opts.promptVersion ?? PROPOSE_TAKES_PROMPT_VERSION;
-    const pageLimit = opts.pageLimit ?? 100;
+    const cfgPageLimit = await engine.getConfig('dream.propose_takes.page_limit');
+    const pageLimit = Number(cfgPageLimit) || opts.pageLimit || 100;
     const skipPagesWithFence = opts.skipPagesWithFence ?? false;
     const proposalRunId = `propose-${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')}-${randomUUID().slice(0, 8)}`;
 
