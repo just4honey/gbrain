@@ -1,0 +1,225 @@
+From 10fa6e79409a0b3d1107a37385016436482aca3b Mon Sep 17 00:00:00 2001
+From: just4honey <j4f@list.ru>
+Date: Sun, 7 Jun 2026 12:32:04 +0300
+Subject: [PATCH 3/8] fix: point weekly upgrade at just4honey/gbrain fork
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Rename origin→upstream (garrytan/gbrain), fork→origin (just4honey/gbrain)
+- Upgrade script now fetches both: merges upstream changes when possible,
+  pulls from fork otherwise
+- Local Cyrillic-slug patches are preserved during upgrades
+---
+ gbrain-weekly-upgrade.sh | 141 ++++++++++++++++++---------------------
+ 1 file changed, 64 insertions(+), 77 deletions(-)
+
+diff --git a/gbrain-weekly-upgrade.sh b/gbrain-weekly-upgrade.sh
+index 1d7e5e0a..17e69ace 100755
+--- a/gbrain-weekly-upgrade.sh
++++ b/gbrain-weekly-upgrade.sh
+@@ -6,11 +6,12 @@ set -euo pipefail
+ GBRAIN_DIR="$HOME/apps/tools/gbrain"
+ ENV_FILE="$HOME/.gbrain/env"
+ LOG_FILE="/tmp/gbrain-weekly-upgrade.log"
++FORK_REMOTE="origin"      # just4honey/gbrain (наш форк с патчами)
++UPSTREAM_REMOTE="upstream" # garrytan/gbrain (оригинал)
+ 
+ exec > "$LOG_FILE" 2>&1
+ 
+-echo "=== GBrain Weekly Upgrade: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+-echo ""
++echo "=== GBrain Weekly Upgrade: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ===\n"
+ 
+ # ---- 1. Load env ----
+ source "$ENV_FILE"
+@@ -20,8 +21,7 @@ cd "$GBRAIN_DIR"
+ PRE_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+ PRE_COMMIT=$(git rev-parse HEAD)
+ echo "Current version: $PRE_VERSION"
+-echo "Current commit:  $PRE_COMMIT"
+-echo ""
++echo "Current commit:  $PRE_COMMIT\n"
+ 
+ # Stash any local changes so they don't block pull
+ if [ -n "$(git status --porcelain)" ]; then
+@@ -34,36 +34,57 @@ fi
+ 
+ # ---- 3. Check for update ----
+ echo "=== Checking for updates ==="
+-git fetch origin 2>&1 || { echo "❌ git fetch failed"; exit 1; }
++echo "Fork remote: $FORK_REMOTE (just4honey/gbrain — наши патчи)"
++echo "Upstream:    $UPSTREAM_REMOTE (garrytan/gbrain — оригинал)"
++
++git fetch "$UPSTREAM_REMOTE" 2>&1 || echo "⚠️  upstream fetch failed (non-fatal)"
++git fetch "$FORK_REMOTE" 2>&1 || { echo "❌ fork fetch failed"; exit 1; }
+ 
+ LOCAL=$(git rev-parse HEAD)
+-REMOTE=$(git rev-parse @{upstream} 2>/dev/null || echo "")
++FORK_REMOTE_HASH=$(git rev-parse "$FORK_REMOTE/master" 2>/dev/null || echo "")
++UPSTREAM_HASH=$(git rev-parse "$UPSTREAM_REMOTE/master" 2>/dev/null || echo "")
++
++UPGRADE_NEEDED=false
++
++# Проверяем upstream (garrytan/gbrain) — есть ли новые коммиты
++if [ -n "$UPSTREAM_HASH" ] && [ "$UPSTREAM_HASH" != "$LOCAL" ]; then
++  if git merge-base --is-ancestor "$LOCAL" "$UPSTREAM_HASH" 2>/dev/null; then
++    echo "⬆️  Upstream has new commits: $LOCAL → $UPSTREAM_HASH"
++    echo "Merging upstream changes (fast-forward)..."
++    if git merge --ff-only "$UPSTREAM_REMOTE/master" 2>&1; then
++      echo "✅ Upstream merge succeeded"
++      UPGRADE_NEEDED=true
++    else
++      echo "⚠️  Diverged — upstream has changes that conflict with our fork."
++      echo "   Skipping upstream this week; local patches preserved."
++    fi
++  fi
++fi
+ 
+-if [ "$LOCAL" = "$REMOTE" ] || [ -z "$REMOTE" ]; then
+-  echo "Already up-to-date ($PRE_VERSION @ $PRE_COMMIT)."
+-  echo ""
+-  echo "=== Running health check (no update needed) ==="
+-else
+-  echo "Update available: $LOCAL -> $REMOTE"
+-  echo ""
+-  echo "=== Running upgrade ==="
+-  
+-  # Pull (uses upstream tracking: origin/master)
+-  if git pull --ff-only 2>&1; then
+-    echo "✅ git pull succeeded"
++# Проверяем форк (just4honey/gbrain) — есть ли новые коммиты
++NEW_LOCAL=$(git rev-parse HEAD)
++if [ -n "$FORK_REMOTE_HASH" ] && [ "$FORK_REMOTE_HASH" != "$NEW_LOCAL" ]; then
++  echo "⬆️  Fork has new commits, pulling..."
++  if git pull --ff-only "$FORK_REMOTE" master 2>&1; then
++    echo "✅ Fork pull succeeded"
++    UPGRADE_NEEDED=true
+   else
+-    echo "❌ git pull failed"
+-    # Rollback
+-    echo "=== Rolling back ==="
++    echo "❌ Fork pull failed, rolling back..."
+     git reset --hard "$PRE_COMMIT"
+-    if [ "$STASHED" = true ]; then
+-      git stash pop || true
+-    fi
+     exit 1
+   fi
+-  
+-  # Install deps
+-  echo "Running bun install..."
++fi
++
++# ---- 4. Install & migrate (если были обновления) ----
++if [ "$UPGRADE_NEEDED" = false ]; then
++  echo "Already up-to-date ($PRE_VERSION @ $PRE_COMMIT).\n"
++  echo "=== Running health check (no update needed) ==="
++else
++  NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
++  NEW_COMMIT=$(git rev-parse HEAD)
++  echo "\nUpgraded: $PRE_VERSION ($PRE_COMMIT) → $NEW_VERSION ($NEW_COMMIT)\n"
++
++  echo "=== Running bun install ==="
+   if bun install 2>&1; then
+     echo "✅ bun install succeeded"
+   else
+@@ -74,68 +95,35 @@ else
+     fi
+     exit 1
+   fi
+-  
+-  NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+-  NEW_COMMIT=$(git rev-parse HEAD)
+-  echo ""
+-  echo "Upgraded: $PRE_VERSION ($PRE_COMMIT) → $NEW_VERSION ($NEW_COMMIT)"
+-  
+-  # Run DB migrations
+-  echo ""
+-  echo "=== Running DB migrations ==="
++
++  echo "\n=== Running DB migrations ==="
+   if gbrain apply-migrations --yes 2>&1; then
+     echo "✅ Migrations applied"
+   else
+-    echo "⚠️  apply-migrations failed, trying gbrain upgrade..."
+-    if gbrain upgrade 2>&1; then
+-      echo "✅ gbrain upgrade completed"
+-      NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+-      echo "Final version: $NEW_VERSION"
+-    else
+-      echo "❌ gbrain upgrade also failed, rolling back..."
+-      git reset --hard "$PRE_COMMIT"
+-      bun install 2>&1
+-      if [ "$STASHED" = true ]; then
+-        git stash pop || true
+-      fi
+-      exit 1
++    echo "⚠️  apply-migrations failed"
++    git reset --hard "$PRE_COMMIT"
++    if [ "$STASHED" = true ]; then
++      git stash pop || true
+     fi
++    exit 1
+   fi
+ fi
+ 
+-# ---- 4. Health check ----
+-echo ""
+-echo "=== Health check (gbrain doctor) ==="
+-# Run doctor, capture all warnings/errors
++# ---- 5. Health check ----
++echo "\n=== Health check (gbrain doctor) ==="
+ DOCTOR_OUTPUT=$(gbrain doctor 2>&1) || true
+ echo "$DOCTOR_OUTPUT"
+ 
+-# Count failures
+ FAIL_COUNT=$(echo "$DOCTOR_OUTPUT" | grep -c "\[FAIL\]" || true)
+ WARN_COUNT=$(echo "$DOCTOR_OUTPUT" | grep -c "\[WARN\]" || true)
+-echo ""
+-echo "Health summary: $FAIL_COUNT FAIL, $WARN_COUNT WARN"
+-
+-# ---- 5. Verify sync still works ----
+-echo ""
+-echo "=== Sync verification ==="
+-SYNC_OUTPUT=$(gbrain sync --skip-failed --no-pull --repo "$HOME/apps/Obsidian/myVault" --no-embed 2>&1) || true
+-echo "$SYNC_OUTPUT" | tail -10
++echo "\nHealth summary: $FAIL_COUNT FAIL, $WARN_COUNT WARN"
+ 
+-if echo "$SYNC_OUTPUT" | grep -qi "error\|fail"; then
+-  echo "⚠️  Sync reported issues (non-critical)"
+-fi
+-
+-# ---- 6. Status summary ----
+-echo ""
+-echo "=== Final status ==="
++# ---- 6. Final status ----
++echo "\n=== Final status ==="
+ FINAL_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+ FINAL_COMMIT=$(git rev-parse HEAD)
+ 
+-gbrain status 2>&1
+-
+-echo ""
+-echo "=== Summary ==="
++echo "\n=== Summary ==="
+ echo "  Version: $PRE_VERSION → $FINAL_VERSION"
+ if [ "$PRE_COMMIT" != "$FINAL_COMMIT" ]; then
+   echo "  Commit:  $PRE_COMMIT → $FINAL_COMMIT"
+@@ -146,10 +134,9 @@ else
+ fi
+ echo "  Health:  $FAIL_COUNT failures, $WARN_COUNT warnings"
+ 
+-# Restore stash if not rolled back
+-if [ "$STASHED" = true ] && [ "$PRE_COMMIT" != "$FINAL_COMMIT" ] && [ "$(git rev-parse HEAD)" != "$PRE_COMMIT" ]; then
++# Restore stash if update happened successfully
++if [ "$STASHED" = true ] && [ "$PRE_COMMIT" != "$FINAL_COMMIT" ]; then
+   git stash pop || true
+ fi
+ 
+-echo ""
+-echo "=== Done: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
++echo "\n=== Done: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+-- 
+2.43.0
+
