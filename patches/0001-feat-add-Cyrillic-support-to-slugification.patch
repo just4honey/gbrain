@@ -1,7 +1,7 @@
 From d2a6a817140fd50017abf3e053859636367c0da2 Mon Sep 17 00:00:00 2001
 From: just4honey <j4f@list.ru>
 Date: Sun, 7 Jun 2026 12:24:02 +0300
-Subject: [PATCH 1/8] feat: add Cyrillic support to slugification
+Subject: [PATCH 01/10] feat: add Cyrillic support to slugification
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
