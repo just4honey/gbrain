@@ -261,6 +261,7 @@ export function extractMarkdownLinks(content: string): { name: string; relTarget
  * order (first match wins):
  *   1. Standard `join(fileDir, relTarget)` — exact relative path as written
  *   2. Ancestor search — strip leading path components from fileDir, retry
+ *   3. Slugified comparison — slugify candidate (lowercase, hyphens) and retry
  *
  * Returns null when no matching slug is found (dangling link).
  */
@@ -275,6 +276,23 @@ export function resolveSlug(fileDir: string, relTarget: string, allSlugs: Set<st
     const ancestor = parts.slice(0, parts.length - strip).join('/');
     const candidate = ancestor ? join(ancestor, targetNoExt) : targetNoExt;
     if (allSlugs.has(candidate)) return candidate;
+  }
+
+  // Issue: Cyrillic/CJK filenames — direct comparison fails because slugs
+  // are lowercased, hyphenated etc. Try slugifying and retry.
+  const slugifyPath = (s: string) => s.split('/').map(seg =>
+    seg.toLowerCase().replace(/[^a-z0-9\s\-\u0400-\u04FF\u4E00-\u9FFF]/g, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+  ).filter(Boolean).join('/');
+  const slugified = slugifyPath(targetNoExt);
+  if (slugified) {
+    if (allSlugs.has(slugified)) return slugified;
+    const sluggedDir = join(fileDir, slugified);
+    if (allSlugs.has(sluggedDir)) return sluggedDir;
+    for (let strip = 1; strip <= parts.length; strip++) {
+      const ancestor = parts.slice(0, parts.length - strip).join('/');
+      const candidate = ancestor ? join(ancestor, slugified) : slugified;
+      if (allSlugs.has(candidate)) return candidate;
+    }
   }
 
   return null;
@@ -426,7 +444,7 @@ export async function extractLinksFromFile(
   if (opts?.includeFrontmatter) {
     // Synthetic sync-ish resolver: only does step 1 (already a slug) and
     // step 2 (dir-hint + slugify), backed by the Set of all known slugs.
-    const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+    const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s\-\u0400-\u04FF\u4E00-\u9FFF]/g, '').trim().replace(/\s+/g, '-');
     const fsResolver = {
       async resolve(name: string, dirHint?: string | string[]): Promise<string | null> {
         if (!name) return null;

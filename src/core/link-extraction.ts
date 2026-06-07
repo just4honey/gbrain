@@ -822,7 +822,9 @@ export interface SlugResolver {
  * final `/`-segment (or the whole slug when it has no `/`).
  */
 export function normalizeBasename(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+  // Preserve Cyrillic (U+0400-U+04FF) and CJK (U+4E00-U+9FFF) to match
+  // slugifySegment's SLUGIFY_KEEP_CHARS from cjk.ts
+  return s.toLowerCase().replace(/[^a-z0-9\s\-\u0400-\u04FF\u4E00-\u9FFF]/g, '').trim().replace(/\s+/g, '-');
 }
 
 /** Stable order: shorter slug first (likely closer to brain root), then lexical. */
@@ -879,7 +881,8 @@ export function makeResolver(
 ): SlugResolver {
   const cache = new Map<string, string | null>();
 
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+  // Delegate to normalizeBasename for consistency (Cyrillic/CJK preservation)
+  const norm = (s: string) => normalizeBasename(s);
 
   // Issue #972: lazy-built basename → slug[] index for global-basename
   // resolution. Built on first call to `resolveBasenameMatches`; reused
