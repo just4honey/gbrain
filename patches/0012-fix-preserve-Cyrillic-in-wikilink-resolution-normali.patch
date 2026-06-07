@@ -1,0 +1,186 @@
+From 24f1be97d97366663621fe973d95ac7773045d5d Mon Sep 17 00:00:00 2001
+From: just4honey <j4f@list.ru>
+Date: Sun, 7 Jun 2026 21:10:28 +0300
+Subject: [PATCH 12/12] fix: preserve Cyrillic in wikilink resolution
+ (normalizeBasename + resolveSlug)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- normalizeBasename: add Cyrillic (U+0400-U+04FF) + CJK (U+4E00-U+9FFF) to keep-chars
+- makeResolver.norm: delegate to normalizeBasename instead of inline regex
+- extract.ts inline slugify: add Cyrillic + CJK to keep-chars
+- resolveSlug: add slugified fallback when direct comparison fails
+- Enabled link_resolution.global_basename=true in config
+
+Without this patch, [[wikilinks]] pointing to files with Cyrillic names
+(e.g. [[people/Лобачева Екатерина Владимировна]]) always resolve to null
+because the slug (people/лобачева-екатерина-владимировна) doesn't match
+the raw path from the wikilink.
+---
+ .gitignore                        |  2 +
+ patches/0007-cyrillic-links.patch | 70 +++++++++++++++++++++++++++++++
+ src/commands/extract.ts           | 20 ++++++++-
+ src/core/link-extraction.ts       |  7 +++-
+ 4 files changed, 96 insertions(+), 3 deletions(-)
+ create mode 100644 patches/0007-cyrillic-links.patch
+
+diff --git a/.gitignore b/.gitignore
+index d0ad7dfa..d7691677 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -41,3 +41,5 @@ test/fixtures/pglite-snapshot.version
+ 
+ # Private brain reports — never check these in (per CLAUDE.md privacy rule)
+ reports/network-intelligence/
++// added by bun build
++cli
+diff --git a/patches/0007-cyrillic-links.patch b/patches/0007-cyrillic-links.patch
+new file mode 100644
+index 00000000..63c95d55
+--- /dev/null
++++ b/patches/0007-cyrillic-links.patch
+@@ -0,0 +1,70 @@
++diff --git a/src/commands/extract.ts b/src/commands/extract.ts
++index a4a8bb78..f7ada9a8 100644
++--- a/src/commands/extract.ts
+++++ b/src/commands/extract.ts
++@@ -261,6 +261,7 @@ export function extractMarkdownLinks(content: string): { name: string; relTarget
++  * order (first match wins):
++  *   1. Standard `join(fileDir, relTarget)` — exact relative path as written
++  *   2. Ancestor search — strip leading path components from fileDir, retry
+++ *   3. Slugified comparison — slugify candidate (lowercase, hyphens) and retry
++  *
++  * Returns null when no matching slug is found (dangling link).
++  */
++@@ -277,6 +278,23 @@ export function resolveSlug(fileDir: string, relTarget: string, allSlugs: Set<st
++     if (allSlugs.has(candidate)) return candidate;
++   }
++ 
+++  // Issue: Cyrillic/CJK filenames — direct comparison fails because slugs
+++  // are lowercased, hyphenated etc. Try slugifying and retry.
+++  const slugifyPath = (s: string) => s.split('/').map(seg =>
+++    seg.toLowerCase().replace(/[^a-z0-9\s\-\u0400-\u04FF\u4E00-\u9FFF]/g, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+++  ).filter(Boolean).join('/');
+++  const slugified = slugifyPath(targetNoExt);
+++  if (slugified) {
+++    if (allSlugs.has(slugified)) return slugified;
+++    const sluggedDir = join(fileDir, slugified);
+++    if (allSlugs.has(sluggedDir)) return sluggedDir;
+++    for (let strip = 1; strip <= parts.length; strip++) {
+++      const ancestor = parts.slice(0, parts.length - strip).join('/');
+++      const candidate = ancestor ? join(ancestor, slugified) : slugified;
+++      if (allSlugs.has(candidate)) return candidate;
+++    }
+++  }
+++
++   return null;
++ }
++ 
++@@ -426,7 +444,7 @@ export async function extractLinksFromFile(
++   if (opts?.includeFrontmatter) {
++     // Synthetic sync-ish resolver: only does step 1 (already a slug) and
++     // step 2 (dir-hint + slugify), backed by the Set of all known slugs.
++-    const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+++    const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s\-\u0400-\u04FF\u4E00-\u9FFF]/g, '').trim().replace(/\s+/g, '-');
++     const fsResolver = {
++       async resolve(name: string, dirHint?: string | string[]): Promise<string | null> {
++         if (!name) return null;
++diff --git a/src/core/link-extraction.ts b/src/core/link-extraction.ts
++index caa7c416..6d3ceb20 100644
++--- a/src/core/link-extraction.ts
+++++ b/src/core/link-extraction.ts
++@@ -822,7 +822,9 @@ export interface SlugResolver {
++  * final `/`-segment (or the whole slug when it has no `/`).
++  */
++ export function normalizeBasename(s: string): string {
++-  return s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+++  // Preserve Cyrillic (U+0400-U+04FF) and CJK (U+4E00-U+9FFF) to match
+++  // slugifySegment's SLUGIFY_KEEP_CHARS from cjk.ts
+++  return s.toLowerCase().replace(/[^a-z0-9\s\-\u0400-\u04FF\u4E00-\u9FFF]/g, '').trim().replace(/\s+/g, '-');
++ }
++ 
++ /** Stable order: shorter slug first (likely closer to brain root), then lexical. */
++@@ -879,7 +881,8 @@ export function makeResolver(
++ ): SlugResolver {
++   const cache = new Map<string, string | null>();
++ 
++-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+++  // Delegate to normalizeBasename for consistency (Cyrillic/CJK preservation)
+++  const norm = (s: string) => normalizeBasename(s);
++ 
++   // Issue #972: lazy-built basename → slug[] index for global-basename
++   // resolution. Built on first call to `resolveBasenameMatches`; reused
+diff --git a/src/commands/extract.ts b/src/commands/extract.ts
+index a4a8bb78..f7ada9a8 100644
+--- a/src/commands/extract.ts
++++ b/src/commands/extract.ts
+@@ -261,6 +261,7 @@ export function extractMarkdownLinks(content: string): { name: string; relTarget
+  * order (first match wins):
+  *   1. Standard `join(fileDir, relTarget)` — exact relative path as written
+  *   2. Ancestor search — strip leading path components from fileDir, retry
++ *   3. Slugified comparison — slugify candidate (lowercase, hyphens) and retry
+  *
+  * Returns null when no matching slug is found (dangling link).
+  */
+@@ -277,6 +278,23 @@ export function resolveSlug(fileDir: string, relTarget: string, allSlugs: Set<st
+     if (allSlugs.has(candidate)) return candidate;
+   }
+ 
++  // Issue: Cyrillic/CJK filenames — direct comparison fails because slugs
++  // are lowercased, hyphenated etc. Try slugifying and retry.
++  const slugifyPath = (s: string) => s.split('/').map(seg =>
++    seg.toLowerCase().replace(/[^a-z0-9\s\-\u0400-\u04FF\u4E00-\u9FFF]/g, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
++  ).filter(Boolean).join('/');
++  const slugified = slugifyPath(targetNoExt);
++  if (slugified) {
++    if (allSlugs.has(slugified)) return slugified;
++    const sluggedDir = join(fileDir, slugified);
++    if (allSlugs.has(sluggedDir)) return sluggedDir;
++    for (let strip = 1; strip <= parts.length; strip++) {
++      const ancestor = parts.slice(0, parts.length - strip).join('/');
++      const candidate = ancestor ? join(ancestor, slugified) : slugified;
++      if (allSlugs.has(candidate)) return candidate;
++    }
++  }
++
+   return null;
+ }
+ 
+@@ -426,7 +444,7 @@ export async function extractLinksFromFile(
+   if (opts?.includeFrontmatter) {
+     // Synthetic sync-ish resolver: only does step 1 (already a slug) and
+     // step 2 (dir-hint + slugify), backed by the Set of all known slugs.
+-    const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
++    const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s\-\u0400-\u04FF\u4E00-\u9FFF]/g, '').trim().replace(/\s+/g, '-');
+     const fsResolver = {
+       async resolve(name: string, dirHint?: string | string[]): Promise<string | null> {
+         if (!name) return null;
+diff --git a/src/core/link-extraction.ts b/src/core/link-extraction.ts
+index caa7c416..6d3ceb20 100644
+--- a/src/core/link-extraction.ts
++++ b/src/core/link-extraction.ts
+@@ -822,7 +822,9 @@ export interface SlugResolver {
+  * final `/`-segment (or the whole slug when it has no `/`).
+  */
+ export function normalizeBasename(s: string): string {
+-  return s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
++  // Preserve Cyrillic (U+0400-U+04FF) and CJK (U+4E00-U+9FFF) to match
++  // slugifySegment's SLUGIFY_KEEP_CHARS from cjk.ts
++  return s.toLowerCase().replace(/[^a-z0-9\s\-\u0400-\u04FF\u4E00-\u9FFF]/g, '').trim().replace(/\s+/g, '-');
+ }
+ 
+ /** Stable order: shorter slug first (likely closer to brain root), then lexical. */
+@@ -879,7 +881,8 @@ export function makeResolver(
+ ): SlugResolver {
+   const cache = new Map<string, string | null>();
+ 
+-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
++  // Delegate to normalizeBasename for consistency (Cyrillic/CJK preservation)
++  const norm = (s: string) => normalizeBasename(s);
+ 
+   // Issue #972: lazy-built basename → slug[] index for global-basename
+   // resolution. Built on first call to `resolveBasenameMatches`; reused
+-- 
+2.43.0
+

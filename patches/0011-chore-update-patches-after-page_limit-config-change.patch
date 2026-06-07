@@ -1,0 +1,1782 @@
+From 898b3b01013c0191154769d0f564b34ba72e167a Mon Sep 17 00:00:00 2001
+From: just4honey <j4f@list.ru>
+Date: Sun, 7 Jun 2026 18:28:41 +0300
+Subject: [PATCH 11/12] chore: update patches after page_limit config change
+
+---
+ ...dd-Cyrillic-support-to-slugification.patch |   2 +-
+ ...llic-from-NFD-decomposition-in-slugi.patch |   2 +-
+ ...ly-upgrade-at-just4honey-gbrain-fork.patch |   2 +-
+ ...ose-takes-prompt-for-DeepSeek-V4-Fla.patch | 196 +++++
+ ...rade-script-with-patch-based-releas.patch} |   2 +-
+ ...-for-deepseek-v4-flash-and-deepseek.patch} |   2 +-
+ ...ches-directory-with-upstream-compati.patch | 505 +++++++++++
+ ...se-takes-prompt-to-working-generic-v.patch | 109 +++
+ ...pdate-patches-to-current-working-set.patch | 814 ++++++++++++++++++
+ ...e_takes-page_limit-configurable-via-.patch |  29 +
+ 10 files changed, 1658 insertions(+), 5 deletions(-)
+ create mode 100644 patches/0004-patch-adapt-propose-takes-prompt-for-DeepSeek-V4-Fla.patch
+ rename patches/{0004-patch-rewrite-upgrade-script-with-patch-based-releas.patch => 0005-patch-rewrite-upgrade-script-with-patch-based-releas.patch} (99%)
+ rename patches/{0005-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch => 0006-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch} (93%)
+ create mode 100644 patches/0007-chore-update-patches-directory-with-upstream-compati.patch
+ create mode 100644 patches/0008-fix-revert-propose-takes-prompt-to-working-generic-v.patch
+ create mode 100644 patches/0009-chore-update-patches-to-current-working-set.patch
+ create mode 100644 patches/0010-feat-make-propose_takes-page_limit-configurable-via-.patch
+
+diff --git a/patches/0001-feat-add-Cyrillic-support-to-slugification.patch b/patches/0001-feat-add-Cyrillic-support-to-slugification.patch
+index 08f81363..8bef4ea9 100644
+--- a/patches/0001-feat-add-Cyrillic-support-to-slugification.patch
++++ b/patches/0001-feat-add-Cyrillic-support-to-slugification.patch
+@@ -1,7 +1,7 @@
+ From d2a6a817140fd50017abf3e053859636367c0da2 Mon Sep 17 00:00:00 2001
+ From: just4honey <j4f@list.ru>
+ Date: Sun, 7 Jun 2026 12:24:02 +0300
+-Subject: [PATCH 1/8] feat: add Cyrillic support to slugification
++Subject: [PATCH 01/10] feat: add Cyrillic support to slugification
+ MIME-Version: 1.0
+ Content-Type: text/plain; charset=UTF-8
+ Content-Transfer-Encoding: 8bit
+diff --git a/patches/0002-fix-protect-Cyrillic-from-NFD-decomposition-in-slugi.patch b/patches/0002-fix-protect-Cyrillic-from-NFD-decomposition-in-slugi.patch
+index eb486c9f..19bf8795 100644
+--- a/patches/0002-fix-protect-Cyrillic-from-NFD-decomposition-in-slugi.patch
++++ b/patches/0002-fix-protect-Cyrillic-from-NFD-decomposition-in-slugi.patch
+@@ -1,7 +1,7 @@
+ From 8fa7acd0d35626f7c0bbcf3d5766c352f106e6cf Mon Sep 17 00:00:00 2001
+ From: just4honey <j4f@list.ru>
+ Date: Sun, 7 Jun 2026 12:25:42 +0300
+-Subject: [PATCH 2/8] =?UTF-8?q?fix:=20protect=20Cyrillic=20=D0=B9/=D1=91?=
++Subject: [PATCH 02/10] =?UTF-8?q?fix:=20protect=20Cyrillic=20=D0=B9/=D1=91?=
+  =?UTF-8?q?=20from=20NFD=20decomposition=20in=20slugify?=
+ MIME-Version: 1.0
+ Content-Type: text/plain; charset=UTF-8
+diff --git a/patches/0003-fix-point-weekly-upgrade-at-just4honey-gbrain-fork.patch b/patches/0003-fix-point-weekly-upgrade-at-just4honey-gbrain-fork.patch
+index bc5f3af3..1453b63b 100644
+--- a/patches/0003-fix-point-weekly-upgrade-at-just4honey-gbrain-fork.patch
++++ b/patches/0003-fix-point-weekly-upgrade-at-just4honey-gbrain-fork.patch
+@@ -1,7 +1,7 @@
+ From 10fa6e79409a0b3d1107a37385016436482aca3b Mon Sep 17 00:00:00 2001
+ From: just4honey <j4f@list.ru>
+ Date: Sun, 7 Jun 2026 12:32:04 +0300
+-Subject: [PATCH 3/8] fix: point weekly upgrade at just4honey/gbrain fork
++Subject: [PATCH 03/10] fix: point weekly upgrade at just4honey/gbrain fork
+ MIME-Version: 1.0
+ Content-Type: text/plain; charset=UTF-8
+ Content-Transfer-Encoding: 8bit
+diff --git a/patches/0004-patch-adapt-propose-takes-prompt-for-DeepSeek-V4-Fla.patch b/patches/0004-patch-adapt-propose-takes-prompt-for-DeepSeek-V4-Fla.patch
+new file mode 100644
+index 00000000..90cb4a0c
+--- /dev/null
++++ b/patches/0004-patch-adapt-propose-takes-prompt-for-DeepSeek-V4-Fla.patch
+@@ -0,0 +1,196 @@
++From 347b2a12d10f15d113e244fc679ed6976115c5a2 Mon Sep 17 00:00:00 2001
++From: just4honey <j4f@list.ru>
++Date: Sun, 7 Jun 2026 15:22:21 +0300
++Subject: [PATCH 04/10] patch: adapt propose-takes prompt for DeepSeek V4 Flash
++
++- New PROMPT_VERSION: v0.36.1.0-deepseek-v4-flash (invalidates cache)
++- Rewrote EXTRACT_TAKES_PROMPT: structured instructions, explicit weight rules,
++  simplified language for DeepSeek compatibility
++- Fixed kind enum in ProposedTake: 'fact'|'take'|'bet'|'hunch' -> 'prediction'|'judgment'|'bet'
++- Changed modelId fallback: claude-sonnet-4-6 -> deepseek-chat
++- Added patches/0004-propose-takes-deepseek.patch for upgrade workflow
++---
++ patches/0004-propose-takes-deepseek.patch | 85 +++++++++++++++++++++++
++ src/core/cycle/propose-takes.ts           | 65 +++++++++--------
++ 2 files changed, 122 insertions(+), 28 deletions(-)
++ create mode 100644 patches/0004-propose-takes-deepseek.patch
++
++diff --git a/patches/0004-propose-takes-deepseek.patch b/patches/0004-propose-takes-deepseek.patch
++new file mode 100644
++index 00000000..d5f1e907
++--- /dev/null
+++++ b/patches/0004-propose-takes-deepseek.patch
++@@ -0,0 +1,85 @@
+++diff --git a/src/core/cycle/propose-takes.ts b/src/core/cycle/propose-takes.ts
+++index 33fbe054..5282ae0d 100644
+++--- a/src/core/cycle/propose-takes.ts
++++++ b/src/core/cycle/propose-takes.ts
+++@@ -53,7 +53,7 @@ import type { PhaseStatus, CyclePhase } from '../cycle.ts';
+++  * verdicts in `take_proposals` (composite key includes prompt_version) stay
+++  * valid as audit history; new runs re-spend LLM tokens on every page.
+++  */
+++-export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
++++export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-deepseek-v4-flash';
+++ 
+++ /**
+++  * Tuned extractor prompt, validated against the hand-labeled synthetic
+++@@ -83,35 +83,44 @@ export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
+++  * fixtures before bumping PROPOSE_TAKES_PROMPT_VERSION; the train-holdout
+++  * gap should stay < 0.10 (overfitting threshold).
+++  */
+++-export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the prose below.
+++-
+++-A "gradeable claim" is a prediction, recommendation, or interpretive judgment
+++-that could turn out wrong over time. Examples:
+++-- "X company will hit ARR milestone by Q3" (prediction)
+++-- "Y founder is going to struggle with execution" (judgment)
+++-- "Z market will compress in 18 months" (prediction)
+++-- "I bet alice wins the round" (bet)
+++-
+++-NOT gradeable (do NOT extract these):
+++-- Pure facts ("X was founded in 2020")
+++-- Direct quotes from others without endorsement
+++-- Restatements of an earlier claim in the same page
+++-
+++-For each gradeable claim, output a JSON object with:
+++-- claim_text   (string, <=200 chars, paraphrase or near-verbatim from prose)
+++-- kind         ('prediction' | 'judgment' | 'bet')
+++-- holder       ('world' | 'people/<slug>' | 'companies/<slug>' | 'brain' — default 'brain' when author asserts the claim)
+++-- weight       (number 0..1 inferred from hedging language: 'I bet'/'strong conviction'=0.7-0.85,
+++-                'I think'/'moderate conviction'=0.5-0.7, 'maybe'/'I'd guess'=0.3-0.5)
+++-- domain       (short tag — e.g. 'tactics', 'macro', 'hiring', 'geography', 'pricing')
+++-
+++-Output ONLY a JSON array of these objects. No prose. No commentary. If no
+++-gradeable claims, return [].
+++-
+++-EXISTING FENCE ROWS (already captured — do NOT propose duplicates):
++++export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the text below.
++++
++++A gradeable claim is a prediction, judgment, or bet — a statement that can be
++++proven right or wrong over time. Extract ONLY claims with clear future outcomes
++++or evaluative positions.
++++
++++EXAMPLES of gradeable claims:
++++- "The company will reach $10M ARR by Q4 2025" (prediction)
++++- "This founder lacks execution skills" (judgment)
++++- "I bet they win the contract" (bet)
++++- "The market will consolidate within 2 years" (prediction)
++++
++++DO NOT extract:
++++- Plain facts ("Founded in 2020", "Has 50 employees")
++++- Direct quotes without the author endorsing them
++++- Repeated claims from earlier in the same page
++++- Vague statements with no clear outcome or evaluative position
++++
++++For each gradeable claim, output a JSON object with these exact fields:
++++  "claim_text": string, max 200 chars, paraphrase or near-verbatim
++++  "kind": one of "prediction" | "judgment" | "bet"
++++  "holder": "world" | "people/<slug>" | "companies/<slug>" | "brain" (default: "brain")
++++  "weight": number 0.0 to 1.0
++++  "domain": short category tag (e.g. "tactics", "macro", "hiring", "pricing", "product")
++++
++++Weight rules — use hedging language to infer confidence:
++++  "I am sure", "definitely", "guaranteed", "certainly" → 0.8–1.0
++++  "I think", "probably", "likely", "I believe" → 0.5–0.7
++++  "Maybe", "possibly", "I wonder", "not sure" → 0.2–0.4
++++  No hedging language at all → 0.5
++++
++++IMPORTANT: Output ONLY a JSON array. No introduction, no commentary, no markdown.
++++If no gradeable claims are found, return [].
++++
++++EXISTING CLAIMS (already captured — skip these to avoid duplicates):
+++ {EXISTING_TAKES_JSON}
+++ 
+++-PAGE PROSE:
++++PAGE TEXT:
+++ {PAGE_BODY}
+++ `;
+++ 
++diff --git a/src/core/cycle/propose-takes.ts b/src/core/cycle/propose-takes.ts
++index 33fbe054..5282ae0d 100644
++--- a/src/core/cycle/propose-takes.ts
+++++ b/src/core/cycle/propose-takes.ts
++@@ -53,7 +53,7 @@ import type { PhaseStatus, CyclePhase } from '../cycle.ts';
++  * verdicts in `take_proposals` (composite key includes prompt_version) stay
++  * valid as audit history; new runs re-spend LLM tokens on every page.
++  */
++-export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
+++export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-deepseek-v4-flash';
++ 
++ /**
++  * Tuned extractor prompt, validated against the hand-labeled synthetic
++@@ -83,35 +83,44 @@ export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
++  * fixtures before bumping PROPOSE_TAKES_PROMPT_VERSION; the train-holdout
++  * gap should stay < 0.10 (overfitting threshold).
++  */
++-export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the prose below.
++-
++-A "gradeable claim" is a prediction, recommendation, or interpretive judgment
++-that could turn out wrong over time. Examples:
++-- "X company will hit ARR milestone by Q3" (prediction)
++-- "Y founder is going to struggle with execution" (judgment)
++-- "Z market will compress in 18 months" (prediction)
++-- "I bet alice wins the round" (bet)
++-
++-NOT gradeable (do NOT extract these):
++-- Pure facts ("X was founded in 2020")
++-- Direct quotes from others without endorsement
++-- Restatements of an earlier claim in the same page
++-
++-For each gradeable claim, output a JSON object with:
++-- claim_text   (string, <=200 chars, paraphrase or near-verbatim from prose)
++-- kind         ('prediction' | 'judgment' | 'bet')
++-- holder       ('world' | 'people/<slug>' | 'companies/<slug>' | 'brain' — default 'brain' when author asserts the claim)
++-- weight       (number 0..1 inferred from hedging language: 'I bet'/'strong conviction'=0.7-0.85,
++-                'I think'/'moderate conviction'=0.5-0.7, 'maybe'/'I'd guess'=0.3-0.5)
++-- domain       (short tag — e.g. 'tactics', 'macro', 'hiring', 'geography', 'pricing')
++-
++-Output ONLY a JSON array of these objects. No prose. No commentary. If no
++-gradeable claims, return [].
++-
++-EXISTING FENCE ROWS (already captured — do NOT propose duplicates):
+++export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the text below.
+++
+++A gradeable claim is a prediction, judgment, or bet — a statement that can be
+++proven right or wrong over time. Extract ONLY claims with clear future outcomes
+++or evaluative positions.
+++
+++EXAMPLES of gradeable claims:
+++- "The company will reach $10M ARR by Q4 2025" (prediction)
+++- "This founder lacks execution skills" (judgment)
+++- "I bet they win the contract" (bet)
+++- "The market will consolidate within 2 years" (prediction)
+++
+++DO NOT extract:
+++- Plain facts ("Founded in 2020", "Has 50 employees")
+++- Direct quotes without the author endorsing them
+++- Repeated claims from earlier in the same page
+++- Vague statements with no clear outcome or evaluative position
+++
+++For each gradeable claim, output a JSON object with these exact fields:
+++  "claim_text": string, max 200 chars, paraphrase or near-verbatim
+++  "kind": one of "prediction" | "judgment" | "bet"
+++  "holder": "world" | "people/<slug>" | "companies/<slug>" | "brain" (default: "brain")
+++  "weight": number 0.0 to 1.0
+++  "domain": short category tag (e.g. "tactics", "macro", "hiring", "pricing", "product")
+++
+++Weight rules — use hedging language to infer confidence:
+++  "I am sure", "definitely", "guaranteed", "certainly" → 0.8–1.0
+++  "I think", "probably", "likely", "I believe" → 0.5–0.7
+++  "Maybe", "possibly", "I wonder", "not sure" → 0.2–0.4
+++  No hedging language at all → 0.5
+++
+++IMPORTANT: Output ONLY a JSON array. No introduction, no commentary, no markdown.
+++If no gradeable claims are found, return [].
+++
+++EXISTING CLAIMS (already captured — skip these to avoid duplicates):
++ {EXISTING_TAKES_JSON}
++ 
++-PAGE PROSE:
+++PAGE TEXT:
++ {PAGE_BODY}
++ `;
++ 
++-- 
++2.43.0
++
+diff --git a/patches/0004-patch-rewrite-upgrade-script-with-patch-based-releas.patch b/patches/0005-patch-rewrite-upgrade-script-with-patch-based-releas.patch
+similarity index 99%
+rename from patches/0004-patch-rewrite-upgrade-script-with-patch-based-releas.patch
+rename to patches/0005-patch-rewrite-upgrade-script-with-patch-based-releas.patch
+index 91962b58..4c7f2693 100644
+--- a/patches/0004-patch-rewrite-upgrade-script-with-patch-based-releas.patch
++++ b/patches/0005-patch-rewrite-upgrade-script-with-patch-based-releas.patch
+@@ -1,7 +1,7 @@
+ From 5a665c437a96bd5a32c63721dac43b76c8509693 Mon Sep 17 00:00:00 2001
+ From: just4honey <j4f@list.ru>
+ Date: Sun, 7 Jun 2026 15:46:40 +0300
+-Subject: [PATCH 5/8] patch: rewrite upgrade script with patch-based release
++Subject: [PATCH 05/10] patch: rewrite upgrade script with patch-based release
+  workflow
+ 
+ - New approach: checkout clean upstream/master, apply patches/000*.patch,
+diff --git a/patches/0005-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch b/patches/0006-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch
+similarity index 93%
+rename from patches/0005-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch
+rename to patches/0006-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch
+index ec043690..9cf2579b 100644
+--- a/patches/0005-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch
++++ b/patches/0006-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch
+@@ -1,7 +1,7 @@
+ From 41fc626a373236a908ebd476673dee2e4fd0ff92 Mon Sep 17 00:00:00 2001
+ From: just4honey <j4f@list.ru>
+ Date: Sun, 7 Jun 2026 15:58:28 +0300
+-Subject: [PATCH 6/8] patch: add pricing for deepseek-v4-flash and
++Subject: [PATCH 06/10] patch: add pricing for deepseek-v4-flash and
+  deepseek-v4-pro
+ 
+ ---
+diff --git a/patches/0007-chore-update-patches-directory-with-upstream-compati.patch b/patches/0007-chore-update-patches-directory-with-upstream-compati.patch
+new file mode 100644
+index 00000000..75b78a2e
+--- /dev/null
++++ b/patches/0007-chore-update-patches-directory-with-upstream-compati.patch
+@@ -0,0 +1,505 @@
++From 950a6bbffee5ebd7d57fcea6cda2a0a7f953cb31 Mon Sep 17 00:00:00 2001
++From: just4honey <j4f@list.ru>
++Date: Sun, 7 Jun 2026 15:58:54 +0300
++Subject: [PATCH 07/10] chore: update patches directory with
++ upstream-compatible patches
++
++---
++ gbrain-weekly-upgrade.sh                  |   2 +-
++ patches/0001-cyrillic-slug.patch          | 259 ++++++++++++++++++++++
++ patches/0002-protect-yo-nfd.patch         |  46 ++++
++ patches/0004-propose-takes-deepseek.patch | 111 ++++++++++
++ patches/0006-deepseek-pricing.patch       |  26 +++
++ 5 files changed, 443 insertions(+), 1 deletion(-)
++ create mode 100644 patches/0001-cyrillic-slug.patch
++ create mode 100644 patches/0002-protect-yo-nfd.patch
++ create mode 100644 patches/0006-deepseek-pricing.patch
++
++diff --git a/gbrain-weekly-upgrade.sh b/gbrain-weekly-upgrade.sh
++index f497596a..7fff584a 100755
++--- a/gbrain-weekly-upgrade.sh
+++++ b/gbrain-weekly-upgrade.sh
++@@ -74,7 +74,7 @@ if [ -n "$UPSTREAM_HASH" ] && [ "$UPSTREAM_HASH" != "$LOCAL" ]; then
++     git checkout -b "$RELEASE_BRANCH" "$UPSTREAM_HASH"
++ 
++     # --- Step A: Apply patches to upstream files ---
++-    for pf in "$PATCHES_DIR"/0001-*.patch "$PATCHES_DIR"/0002-*.patch "$PATCHES_DIR"/0004-*.patch; do
+++    for pf in "$PATCHES_DIR"/0001-*.patch "$PATCHES_DIR"/0002-*.patch "$PATCHES_DIR"/0004-*.patch "$PATCHES_DIR"/0006-*.patch; do
++       [ -f "$pf" ] || continue
++       pname=$(basename "$pf")
++       echo "  Applying $pname..."
++diff --git a/patches/0001-cyrillic-slug.patch b/patches/0001-cyrillic-slug.patch
++new file mode 100644
++index 00000000..cea2b124
++--- /dev/null
+++++ b/patches/0001-cyrillic-slug.patch
++@@ -0,0 +1,259 @@
+++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+++From: just4honey <j4f@list.ru>
+++Date: Sun, 7 Jun 2026 12:24:02 +0300
+++Subject: [PATCH 1/6] feat: add Cyrillic support to slugification
+++MIME-Version: 1.0
+++Content-Type: text/plain; charset=UTF-8
+++Content-Transfer-Encoding: 8bit
+++
+++Extend SLUGIFY_KEEP_RE and SLUG_SEGMENT_PATTERN with Cyrillic
+++range U+0400-U+04FF so files with Cyrillic names produce
+++non-empty slugs (e.g. Инфосэл → инфосэл).
+++
+++just4honey/gbrain fork — local patch.
+++---
+++ gbrain-weekly-upgrade.sh | 155 +++++++++++++++++++++++++++++++++++++++
+++ run-gbrain.sh            |  16 ++++
+++ src/core/cjk.ts          |   9 +++
+++ src/core/sync.ts         |   6 +-
+++ 4 files changed, 183 insertions(+), 3 deletions(-)
+++ create mode 100755 gbrain-weekly-upgrade.sh
+++ create mode 100755 run-gbrain.sh
+++
+++diff --git a/gbrain-weekly-upgrade.sh b/gbrain-weekly-upgrade.sh
+++new file mode 100755
+++index 00000000..1d7e5e0a
+++--- /dev/null
++++++ b/gbrain-weekly-upgrade.sh
+++@@ -0,0 +1,155 @@
++++#!/usr/bin/env bash
++++# GBrain weekly upgrade & health check
++++# Runs every Sunday at 0300 UTC
++++set -euo pipefail
++++
++++GBRAIN_DIR="$HOME/apps/tools/gbrain"
++++ENV_FILE="$HOME/.gbrain/env"
++++LOG_FILE="/tmp/gbrain-weekly-upgrade.log"
++++
++++exec > "$LOG_FILE" 2>&1
++++
++++echo "=== GBrain Weekly Upgrade: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
++++echo ""
++++
++++# ---- 1. Load env ----
++++source "$ENV_FILE"
++++
++++# ---- 2. Capture pre-upgrade state ----
++++cd "$GBRAIN_DIR"
++++PRE_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
++++PRE_COMMIT=$(git rev-parse HEAD)
++++echo "Current version: $PRE_VERSION"
++++echo "Current commit:  $PRE_COMMIT"
++++echo ""
++++
++++# Stash any local changes so they don't block pull
++++if [ -n "$(git status --porcelain)" ]; then
++++  echo "⚠️  Local changes detected, stashing..."
++++  git stash push -m "gbrain-weekly-auto-stash $(date -u '+%Y-%m-%d')"
++++  STASHED=true
++++else
++++  STASHED=false
++++fi
++++
++++# ---- 3. Check for update ----
++++echo "=== Checking for updates ==="
++++git fetch origin 2>&1 || { echo "❌ git fetch failed"; exit 1; }
++++
++++LOCAL=$(git rev-parse HEAD)
++++REMOTE=$(git rev-parse @{upstream} 2>/dev/null || echo "")
++++
++++if [ "$LOCAL" = "$REMOTE" ] || [ -z "$REMOTE" ]; then
++++  echo "Already up-to-date ($PRE_VERSION @ $PRE_COMMIT)."
++++  echo ""
++++  echo "=== Running health check (no update needed) ==="
++++else
++++  echo "Update available: $LOCAL -> $REMOTE"
++++  echo ""
++++  echo "=== Running upgrade ==="
++++  
++++  # Pull (uses upstream tracking: origin/master)
++++  if git pull --ff-only 2>&1; then
++++    echo "✅ git pull succeeded"
++++  else
++++    echo "❌ git pull failed"
++++    # Rollback
++++    echo "=== Rolling back ==="
++++    git reset --hard "$PRE_COMMIT"
++++    if [ "$STASHED" = true ]; then
++++      git stash pop || true
++++    fi
++++    exit 1
++++  fi
++++  
++++  # Install deps
++++  echo "Running bun install..."
++++  if bun install 2>&1; then
++++    echo "✅ bun install succeeded"
++++  else
++++    echo "❌ bun install failed, rolling back..."
++++    git reset --hard "$PRE_COMMIT"
++++    if [ "$STASHED" = true ]; then
++++      git stash pop || true
++++    fi
++++    exit 1
++++  fi
++++  
++++  NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
++++  NEW_COMMIT=$(git rev-parse HEAD)
++++  echo ""
++++  echo "Upgraded: $PRE_VERSION ($PRE_COMMIT) → $NEW_VERSION ($NEW_COMMIT)"
++++  
++++  # Run DB migrations
++++  echo ""
++++  echo "=== Running DB migrations ==="
++++  if gbrain apply-migrations --yes 2>&1; then
++++    echo "✅ Migrations applied"
++++  else
++++    echo "⚠️  apply-migrations failed, trying gbrain upgrade..."
++++    if gbrain upgrade 2>&1; then
++++      echo "✅ gbrain upgrade completed"
++++      NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
++++      echo "Final version: $NEW_VERSION"
++++    else
++++      echo "❌ gbrain upgrade also failed, rolling back..."
++++      git reset --hard "$PRE_COMMIT"
++++      bun install 2>&1
++++      if [ "$STASHED" = true ]; then
++++        git stash pop || true
++++      fi
++++      exit 1
++++    fi
++++  fi
++++fi
++++
++++# ---- 4. Health check ----
++++echo ""
++++echo "=== Health check (gbrain doctor) ==="
++++# Run doctor, capture all warnings/errors
++++DOCTOR_OUTPUT=$(gbrain doctor 2>&1) || true
++++echo "$DOCTOR_OUTPUT"
++++
++++# Count failures
++++FAIL_COUNT=$(echo "$DOCTOR_OUTPUT" | grep -c "\[FAIL\]" || true)
++++WARN_COUNT=$(echo "$DOCTOR_OUTPUT" | grep -c "\[WARN\]" || true)
++++echo ""
++++echo "Health summary: $FAIL_COUNT FAIL, $WARN_COUNT WARN"
++++
++++# ---- 5. Verify sync still works ----
++++echo ""
++++echo "=== Sync verification ==="
++++SYNC_OUTPUT=$(gbrain sync --skip-failed --no-pull --repo "$HOME/apps/Obsidian/myVault" --no-embed 2>&1) || true
++++echo "$SYNC_OUTPUT" | tail -10
++++
++++if echo "$SYNC_OUTPUT" | grep -qi "error\|fail"; then
++++  echo "⚠️  Sync reported issues (non-critical)"
++++fi
++++
++++# ---- 6. Status summary ----
++++echo ""
++++echo "=== Final status ==="
++++FINAL_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
++++FINAL_COMMIT=$(git rev-parse HEAD)
++++
++++gbrain status 2>&1
++++
++++echo ""
++++echo "=== Summary ==="
++++echo "  Version: $PRE_VERSION → $FINAL_VERSION"
++++if [ "$PRE_COMMIT" != "$FINAL_COMMIT" ]; then
++++  echo "  Commit:  $PRE_COMMIT → $FINAL_COMMIT"
++++  echo "  Result:  UPDATED ✅"
++++else
++++  echo "  Commit:  $PRE_COMMIT (unchanged)"
++++  echo "  Result:  UP-TO-DATE ✅"
++++fi
++++echo "  Health:  $FAIL_COUNT failures, $WARN_COUNT warnings"
++++
++++# Restore stash if not rolled back
++++if [ "$STASHED" = true ] && [ "$PRE_COMMIT" != "$FINAL_COMMIT" ] && [ "$(git rev-parse HEAD)" != "$PRE_COMMIT" ]; then
++++  git stash pop || true
++++fi
++++
++++echo ""
++++echo "=== Done: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+++diff --git a/run-gbrain.sh b/run-gbrain.sh
+++new file mode 100755
+++index 00000000..260752de
+++--- /dev/null
++++++ b/run-gbrain.sh
+++@@ -0,0 +1,16 @@
++++#!/usr/bin/env bash
++++set -euo pipefail
++++
++++export BUN_INSTALL="$HOME/.bun"
++++export PATH="$BUN_INSTALL/bin:$PATH"
++++source "$HOME/.gbrain/env"
++++
++++VAULT="/home/just4honey/apps/Obsidian/myVault"
++++
++++# gbrain sync — использует git last_commit, импортирует только новые/изменённые файлы
++++/home/just4honey/.local/bin/gbrain sync --skip-failed --no-pull --repo "$VAULT" --no-embed 2>&1
++++
++++# embed --stale — эмбеддит только чанки без эмбеддинга (реально новые)
++++/home/just4honey/.local/bin/gbrain embed --stale 2>&1
++++
++++echo "[$(date '+%Y-%m-%d %H:%M:%S')] Done"
+++diff --git a/src/core/cjk.ts b/src/core/cjk.ts
+++index d9c53187..f5c42b82 100644
+++--- a/src/core/cjk.ts
++++++ b/src/core/cjk.ts
+++@@ -18,6 +18,15 @@
+++ 
+++ export const CJK_SLUG_CHARS = '一-鿿぀-ゟ゠-ヿ가-힯';
+++ 
++++/**
++++ * Characters preserved during slugification. Extends CJK with Cyrillic
++++ * (Basic Cyrillic U+0400–U+04FF covers Russian, Ukrainian, Bulgarian, etc.)
++++ * so files with Cyrillic names produce non-empty slugs.
++++ *
++++ * v0.42.15.0+ (just4honey fork) — Cyrillic range added.
++++ */
++++export const SLUGIFY_KEEP_CHARS = CJK_SLUG_CHARS + '\u0400-\u04FF';
++++
+++ export const CJK_RANGES_REGEX = new RegExp(`[${CJK_SLUG_CHARS}]`);
+++ 
+++ export const CJK_SENTENCE_DELIMITERS = ['。', '！', '？']; // 。！？
+++diff --git a/src/core/sync.ts b/src/core/sync.ts
+++index 6604343a..932affe2 100644
+++--- a/src/core/sync.ts
++++++ b/src/core/sync.ts
+++@@ -11,7 +11,7 @@
+++  *   pathToSlug()  →  convert file paths to page slugs
+++  */
+++ 
+++-import { CJK_SLUG_CHARS } from './cjk.ts';
++++import { CJK_SLUG_CHARS, SLUGIFY_KEEP_CHARS } from './cjk.ts';
+++ // v0.37.7.0 #1169 submodule-detection helpers. Bottom-of-file already
+++ // aliases existsSync as `_existsSync` for other purposes; the top-of-file
+++ // import keeps the pruneDir helper's deps near its callsite.
+++@@ -379,7 +379,7 @@ export function unsyncableReason(path: string, opts: SyncableOptions = {}): Sync
+++  * Pattern is the inner character class only (no anchors); callers wrap it
+++  * in `^...$` or compose it with prefixes like `(?:people|companies)/...`.
+++  */
+++-export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${CJK_SLUG_CHARS}]+`);
++++export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${SLUGIFY_KEEP_CHARS}]+`);
+++ 
+++ /**
+++  * Slugify a single path segment: lowercase, strip special chars, spaces → hyphens.
+++@@ -387,7 +387,7 @@ export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${CJK_SLUG_CHARS}]+`
+++  * NFC re-normalize after the NFD-strip-accents pass so Hangul Jamo recomposes back
+++  * into precomposed syllables that fall inside the whitelist.
+++  */
+++-const SLUGIFY_KEEP_RE = new RegExp(`[^a-z0-9.\\s_\\-${CJK_SLUG_CHARS}]`, 'g');
++++const SLUGIFY_KEEP_RE = new RegExp(`[^a-z0-9.\\s_\\-${SLUGIFY_KEEP_CHARS}]`, 'g');
+++ 
+++ export function slugifySegment(segment: string): string {
+++   return segment
+++-- 
+++2.43.0
+++
++diff --git a/patches/0002-protect-yo-nfd.patch b/patches/0002-protect-yo-nfd.patch
++new file mode 100644
++index 00000000..f5a75a15
++--- /dev/null
+++++ b/patches/0002-protect-yo-nfd.patch
++@@ -0,0 +1,46 @@
+++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+++From: just4honey <j4f@list.ru>
+++Date: Sun, 7 Jun 2026 12:25:42 +0300
+++Subject: [PATCH 2/6] =?UTF-8?q?fix:=20protect=20Cyrillic=20=D0=B9/=D1=91?=
+++ =?UTF-8?q?=20from=20NFD=20decomposition=20in=20slugify?=
+++MIME-Version: 1.0
+++Content-Type: text/plain; charset=UTF-8
+++Content-Transfer-Encoding: 8bit
+++
+++NFD normalization decomposes й→и+breve and ё→е+diaeresis, then the
+++combining-mark strip removes the distinguishing mark, turning й into
+++и and ё into е. Pre-protect these chars before NFD and restore after.
+++
+++just4honey/gbrain fork — local patch.
+++---
+++ src/core/sync.ts | 10 ++++++++--
+++ 1 file changed, 8 insertions(+), 2 deletions(-)
+++
+++diff --git a/src/core/sync.ts b/src/core/sync.ts
+++index 932affe2..092aefeb 100644
+++--- a/src/core/sync.ts
++++++ b/src/core/sync.ts
+++@@ -390,12 +390,18 @@ export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${SLUGIFY_KEEP_CHARS
+++ const SLUGIFY_KEEP_RE = new RegExp(`[^a-z0-9.\\s_\\-${SLUGIFY_KEEP_CHARS}]`, 'g');
+++ 
+++ export function slugifySegment(segment: string): string {
+++-  return segment
++++  // Pre-protect Cyrillic decomposable chars (й→и is destructive)
++++  // These chars decompose via NFD into a base + combining mark, and the
++++  // combining-mark strip then removes the distinguishing feature.
++++  const protected_ = segment.replace(/ё/g, 'e_cyr_yo').replace(/й/g, 'i_cyr_short');
++++  return protected_
+++     .normalize('NFD')                     // Decompose accented chars
+++     .replace(/[\u0300-\u036f]/g, '')      // Strip accent marks
+++     .normalize('NFC')                     // Recompose Hangul Jamo back to Syllables (v0.32.7)
+++     .toLowerCase()
+++-    .replace(SLUGIFY_KEEP_RE, '')         // Keep alnum, dots, spaces, _-, and CJK (v0.32.7)
++++    .replace(/e_cyr_yo/g, 'ё')            // Restore ё
++++    .replace(/i_cyr_short/g, 'й')         // Restore й
++++    .replace(SLUGIFY_KEEP_RE, '')         // Keep alnum, dots, spaces, _-, and CJK + Cyrillic
+++     .replace(/[\s]+/g, '-')              // Spaces → hyphens
+++     .replace(/-+/g, '-')                 // Collapse multiple hyphens
+++     .replace(/^-|-$/g, '');              // Strip leading/trailing hyphens
+++-- 
+++2.43.0
+++
++diff --git a/patches/0004-propose-takes-deepseek.patch b/patches/0004-propose-takes-deepseek.patch
++index d5f1e907..3af6118b 100644
++--- a/patches/0004-propose-takes-deepseek.patch
+++++ b/patches/0004-propose-takes-deepseek.patch
++@@ -1,3 +1,111 @@
+++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+++From: just4honey <j4f@list.ru>
+++Date: Sun, 7 Jun 2026 15:22:21 +0300
+++Subject: [PATCH 4/6] patch: adapt propose-takes prompt for DeepSeek V4 Flash
+++
+++- New PROMPT_VERSION: v0.36.1.0-deepseek-v4-flash (invalidates cache)
+++- Rewrote EXTRACT_TAKES_PROMPT: structured instructions, explicit weight rules,
+++  simplified language for DeepSeek compatibility
+++- Fixed kind enum in ProposedTake: 'fact'|'take'|'bet'|'hunch' -> 'prediction'|'judgment'|'bet'
+++- Changed modelId fallback: claude-sonnet-4-6 -> deepseek-chat
+++- Added patches/0004-propose-takes-deepseek.patch for upgrade workflow
+++---
+++ patches/0004-propose-takes-deepseek.patch | 85 +++++++++++++++++++++++
+++ src/core/cycle/propose-takes.ts           | 65 +++++++++--------
+++ 2 files changed, 122 insertions(+), 28 deletions(-)
+++ create mode 100644 patches/0004-propose-takes-deepseek.patch
+++
+++diff --git a/patches/0004-propose-takes-deepseek.patch b/patches/0004-propose-takes-deepseek.patch
+++new file mode 100644
+++index 00000000..d5f1e907
+++--- /dev/null
++++++ b/patches/0004-propose-takes-deepseek.patch
+++@@ -0,0 +1,85 @@
++++diff --git a/src/core/cycle/propose-takes.ts b/src/core/cycle/propose-takes.ts
++++index 33fbe054..5282ae0d 100644
++++--- a/src/core/cycle/propose-takes.ts
+++++++ b/src/core/cycle/propose-takes.ts
++++@@ -53,7 +53,7 @@ import type { PhaseStatus, CyclePhase } from '../cycle.ts';
++++  * verdicts in `take_proposals` (composite key includes prompt_version) stay
++++  * valid as audit history; new runs re-spend LLM tokens on every page.
++++  */
++++-export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
+++++export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-deepseek-v4-flash';
++++ 
++++ /**
++++  * Tuned extractor prompt, validated against the hand-labeled synthetic
++++@@ -83,35 +83,44 @@ export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
++++  * fixtures before bumping PROPOSE_TAKES_PROMPT_VERSION; the train-holdout
++++  * gap should stay < 0.10 (overfitting threshold).
++++  */
++++-export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the prose below.
++++-
++++-A "gradeable claim" is a prediction, recommendation, or interpretive judgment
++++-that could turn out wrong over time. Examples:
++++-- "X company will hit ARR milestone by Q3" (prediction)
++++-- "Y founder is going to struggle with execution" (judgment)
++++-- "Z market will compress in 18 months" (prediction)
++++-- "I bet alice wins the round" (bet)
++++-
++++-NOT gradeable (do NOT extract these):
++++-- Pure facts ("X was founded in 2020")
++++-- Direct quotes from others without endorsement
++++-- Restatements of an earlier claim in the same page
++++-
++++-For each gradeable claim, output a JSON object with:
++++-- claim_text   (string, <=200 chars, paraphrase or near-verbatim from prose)
++++-- kind         ('prediction' | 'judgment' | 'bet')
++++-- holder       ('world' | 'people/<slug>' | 'companies/<slug>' | 'brain' — default 'brain' when author asserts the claim)
++++-- weight       (number 0..1 inferred from hedging language: 'I bet'/'strong conviction'=0.7-0.85,
++++-                'I think'/'moderate conviction'=0.5-0.7, 'maybe'/'I'd guess'=0.3-0.5)
++++-- domain       (short tag — e.g. 'tactics', 'macro', 'hiring', 'geography', 'pricing')
++++-
++++-Output ONLY a JSON array of these objects. No prose. No commentary. If no
++++-gradeable claims, return [].
++++-
++++-EXISTING FENCE ROWS (already captured — do NOT propose duplicates):
+++++export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the text below.
+++++
+++++A gradeable claim is a prediction, judgment, or bet — a statement that can be
+++++proven right or wrong over time. Extract ONLY claims with clear future outcomes
+++++or evaluative positions.
+++++
+++++EXAMPLES of gradeable claims:
+++++- "The company will reach $10M ARR by Q4 2025" (prediction)
+++++- "This founder lacks execution skills" (judgment)
+++++- "I bet they win the contract" (bet)
+++++- "The market will consolidate within 2 years" (prediction)
+++++
+++++DO NOT extract:
+++++- Plain facts ("Founded in 2020", "Has 50 employees")
+++++- Direct quotes without the author endorsing them
+++++- Repeated claims from earlier in the same page
+++++- Vague statements with no clear outcome or evaluative position
+++++
+++++For each gradeable claim, output a JSON object with these exact fields:
+++++  "claim_text": string, max 200 chars, paraphrase or near-verbatim
+++++  "kind": one of "prediction" | "judgment" | "bet"
+++++  "holder": "world" | "people/<slug>" | "companies/<slug>" | "brain" (default: "brain")
+++++  "weight": number 0.0 to 1.0
+++++  "domain": short category tag (e.g. "tactics", "macro", "hiring", "pricing", "product")
+++++
+++++Weight rules — use hedging language to infer confidence:
+++++  "I am sure", "definitely", "guaranteed", "certainly" → 0.8–1.0
+++++  "I think", "probably", "likely", "I believe" → 0.5–0.7
+++++  "Maybe", "possibly", "I wonder", "not sure" → 0.2–0.4
+++++  No hedging language at all → 0.5
+++++
+++++IMPORTANT: Output ONLY a JSON array. No introduction, no commentary, no markdown.
+++++If no gradeable claims are found, return [].
+++++
+++++EXISTING CLAIMS (already captured — skip these to avoid duplicates):
++++ {EXISTING_TAKES_JSON}
++++ 
++++-PAGE PROSE:
+++++PAGE TEXT:
++++ {PAGE_BODY}
++++ `;
++++ 
++ diff --git a/src/core/cycle/propose-takes.ts b/src/core/cycle/propose-takes.ts
++ index 33fbe054..5282ae0d 100644
++ --- a/src/core/cycle/propose-takes.ts
++@@ -83,3 +191,6 @@ index 33fbe054..5282ae0d 100644
++  {PAGE_BODY}
++  `;
++  
+++-- 
+++2.43.0
+++
++diff --git a/patches/0006-deepseek-pricing.patch b/patches/0006-deepseek-pricing.patch
++new file mode 100644
++index 00000000..bf2f5cf4
++--- /dev/null
+++++ b/patches/0006-deepseek-pricing.patch
++@@ -0,0 +1,26 @@
+++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+++From: just4honey <j4f@list.ru>
+++Date: Sun, 7 Jun 2026 15:58:28 +0300
+++Subject: [PATCH 6/6] patch: add pricing for deepseek-v4-flash and
+++ deepseek-v4-pro
+++
+++---
+++ src/core/model-pricing.ts | 2 ++
+++ 1 file changed, 2 insertions(+)
+++
+++diff --git a/src/core/model-pricing.ts b/src/core/model-pricing.ts
+++index db1e8854..278fed0f 100644
+++--- a/src/core/model-pricing.ts
++++++ b/src/core/model-pricing.ts
+++@@ -81,6 +81,8 @@ export const CANONICAL_PRICING: Record<string, ModelPricing> = {
+++   // ── Together / DeepSeek (cross-modal-eval panel) ───────────────────────
+++   'together:meta-llama/Llama-3.3-70B-Instruct-Turbo': { input: 0.88, output: 0.88 },
+++   'deepseek:deepseek-chat':               { input:  0.14, output:  0.28 },
++++  'deepseek:deepseek-v4-flash':           { input:  0.15, output:  0.60 },
++++  'deepseek:deepseek-v4-pro':             { input:  2.00, output:  8.00 },
+++ };
+++ 
+++ /**
+++-- 
+++2.43.0
+++
++-- 
++2.43.0
++
+diff --git a/patches/0008-fix-revert-propose-takes-prompt-to-working-generic-v.patch b/patches/0008-fix-revert-propose-takes-prompt-to-working-generic-v.patch
+new file mode 100644
+index 00000000..f69172ab
+--- /dev/null
++++ b/patches/0008-fix-revert-propose-takes-prompt-to-working-generic-v.patch
+@@ -0,0 +1,109 @@
++From 0b9bfa1b0080f9eabb49ecc1a093810e06b8808f Mon Sep 17 00:00:00 2001
++From: just4honey <j4f@list.ru>
++Date: Sun, 7 Jun 2026 17:45:13 +0300
++Subject: [PATCH 08/10] fix: revert propose-takes prompt to working generic
++ version
++
++DeepSeek-optimized prompt from 347b2a12 caused 300s timeouts.
++Reverting to tuned-generic prompt that works with DeepSeek V4 Flash
++(21 proposals generated in ~15 min for 100 pages).
++---
++ src/core/cycle/propose-takes.ts | 67 ++++++++++++++-------------------
++ 1 file changed, 29 insertions(+), 38 deletions(-)
++
++diff --git a/src/core/cycle/propose-takes.ts b/src/core/cycle/propose-takes.ts
++index 5282ae0d..f361eb61 100644
++--- a/src/core/cycle/propose-takes.ts
+++++ b/src/core/cycle/propose-takes.ts
++@@ -53,7 +53,7 @@ import type { PhaseStatus, CyclePhase } from '../cycle.ts';
++  * verdicts in `take_proposals` (composite key includes prompt_version) stay
++  * valid as audit history; new runs re-spend LLM tokens on every page.
++  */
++-export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-deepseek-v4-flash';
+++export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
++ 
++ /**
++  * Tuned extractor prompt, validated against the hand-labeled synthetic
++@@ -76,51 +76,42 @@ export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-deepseek-v4-flash';
++  *     (pure facts, direct quotes, restatements).
++  *   - conviction inference rules anchored to specific hedging language
++  *     ("I bet"/"strong conviction"=0.7-0.85, "I think"/"moderate"=0.5-0.7).
++- *   - kind enum kept narrow ('prediction'|'judgment'|'bet') — the v1
+++ *   - kind enum kept narrow ('prediction'|'judgment'|'bet') — the v0.36.1
++  *     stub's 4-tag enum bled into noise classification.
++  *
++  * Replaces the v0.36.1.0-stub. If you re-tune, run cat15 against the
++  * fixtures before bumping PROPOSE_TAKES_PROMPT_VERSION; the train-holdout
++  * gap should stay < 0.10 (overfitting threshold).
++  */
++-export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the text below.
++-
++-A gradeable claim is a prediction, judgment, or bet — a statement that can be
++-proven right or wrong over time. Extract ONLY claims with clear future outcomes
++-or evaluative positions.
++-
++-EXAMPLES of gradeable claims:
++-- "The company will reach $10M ARR by Q4 2025" (prediction)
++-- "This founder lacks execution skills" (judgment)
++-- "I bet they win the contract" (bet)
++-- "The market will consolidate within 2 years" (prediction)
++-
++-DO NOT extract:
++-- Plain facts ("Founded in 2020", "Has 50 employees")
++-- Direct quotes without the author endorsing them
++-- Repeated claims from earlier in the same page
++-- Vague statements with no clear outcome or evaluative position
++-
++-For each gradeable claim, output a JSON object with these exact fields:
++-  "claim_text": string, max 200 chars, paraphrase or near-verbatim
++-  "kind": one of "prediction" | "judgment" | "bet"
++-  "holder": "world" | "people/<slug>" | "companies/<slug>" | "brain" (default: "brain")
++-  "weight": number 0.0 to 1.0
++-  "domain": short category tag (e.g. "tactics", "macro", "hiring", "pricing", "product")
++-
++-Weight rules — use hedging language to infer confidence:
++-  "I am sure", "definitely", "guaranteed", "certainly" → 0.8–1.0
++-  "I think", "probably", "likely", "I believe" → 0.5–0.7
++-  "Maybe", "possibly", "I wonder", "not sure" → 0.2–0.4
++-  No hedging language at all → 0.5
++-
++-IMPORTANT: Output ONLY a JSON array. No introduction, no commentary, no markdown.
++-If no gradeable claims are found, return [].
++-
++-EXISTING CLAIMS (already captured — skip these to avoid duplicates):
+++export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the prose below.
+++
+++A "gradeable claim" is a prediction, recommendation, or interpretive judgment
+++that could turn out wrong over time. Examples:
+++- "X company will hit ARR milestone by Q3" (prediction)
+++- "Y founder is going to struggle with execution" (judgment)
+++- "Z market will compress in 18 months" (prediction)
+++- "I bet alice wins the round" (bet)
+++
+++NOT gradeable (do NOT extract these):
+++- Pure facts ("X was founded in 2020")
+++- Direct quotes from others without endorsement
+++- Restatements of an earlier claim in the same page
+++
+++For each gradeable claim, output a JSON object with:
+++- claim_text   (string, <=200 chars, paraphrase or near-verbatim from prose)
+++- kind         ('prediction' | 'judgment' | 'bet')
+++- holder       ('world' | 'people/<slug>' | 'companies/<slug>' | 'brain' — default 'brain' when author asserts the claim)
+++- weight       (number 0..1 inferred from hedging language: 'I bet'/'strong conviction'=0.7-0.85,
+++                'I think'/'moderate conviction'=0.5-0.7, 'maybe'/'I'd guess'=0.3-0.5)
+++- domain       (short tag — e.g. 'tactics', 'macro', 'hiring', 'geography', 'pricing')
+++
+++Output ONLY a JSON array of these objects. No prose. No commentary. If no
+++gradeable claims, return [].
+++
+++EXISTING FENCE ROWS (already captured — do NOT propose duplicates):
++ {EXISTING_TAKES_JSON}
++ 
++-PAGE TEXT:
+++PAGE PROSE:
++ {PAGE_BODY}
++ `;
++ 
++-- 
++2.43.0
++
+diff --git a/patches/0009-chore-update-patches-to-current-working-set.patch b/patches/0009-chore-update-patches-to-current-working-set.patch
+new file mode 100644
+index 00000000..da214f41
+--- /dev/null
++++ b/patches/0009-chore-update-patches-to-current-working-set.patch
+@@ -0,0 +1,814 @@
++From 5a23bfca52d02bfd440ac77a8beab1211a63378a Mon Sep 17 00:00:00 2001
++From: just4honey <j4f@list.ru>
++Date: Sun, 7 Jun 2026 17:45:46 +0300
++Subject: [PATCH 09/10] chore: update patches to current working set
++
++- Remove propose-takes prompt patches (reverted to upstream)
++- Remove chore-update-patches patch (self-referential)
++- Keep 5 essential patches: cyrillic slug, NFD fix, fork redirect,
++  upgrade script, deepseek pricing
++- Renumber sequentially 1-5
++---
++ ...d-Cyrillic-support-to-slugification.patch} |   4 +-
++ ...lic-from-NFD-decomposition-in-slugi.patch} |   4 +-
++ ...ly-upgrade-at-just4honey-gbrain-fork.patch | 225 +++++++++++++
++ ...grade-script-with-patch-based-releas.patch | 296 ++++++++++++++++++
++ patches/0004-propose-takes-deepseek.patch     | 196 ------------
++ ...-for-deepseek-v4-flash-and-deepseek.patch} |   4 +-
++ 6 files changed, 527 insertions(+), 202 deletions(-)
++ rename patches/{0001-cyrillic-slug.patch => 0001-feat-add-Cyrillic-support-to-slugification.patch} (98%)
++ rename patches/{0002-protect-yo-nfd.patch => 0002-fix-protect-Cyrillic-from-NFD-decomposition-in-slugi.patch} (94%)
++ create mode 100644 patches/0003-fix-point-weekly-upgrade-at-just4honey-gbrain-fork.patch
++ create mode 100644 patches/0004-patch-rewrite-upgrade-script-with-patch-based-releas.patch
++ delete mode 100644 patches/0004-propose-takes-deepseek.patch
++ rename patches/{0006-deepseek-pricing.patch => 0005-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch} (87%)
++
++diff --git a/patches/0001-cyrillic-slug.patch b/patches/0001-feat-add-Cyrillic-support-to-slugification.patch
++similarity index 98%
++rename from patches/0001-cyrillic-slug.patch
++rename to patches/0001-feat-add-Cyrillic-support-to-slugification.patch
++index cea2b124..08f81363 100644
++--- a/patches/0001-cyrillic-slug.patch
+++++ b/patches/0001-feat-add-Cyrillic-support-to-slugification.patch
++@@ -1,7 +1,7 @@
++-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+++From d2a6a817140fd50017abf3e053859636367c0da2 Mon Sep 17 00:00:00 2001
++ From: just4honey <j4f@list.ru>
++ Date: Sun, 7 Jun 2026 12:24:02 +0300
++-Subject: [PATCH 1/6] feat: add Cyrillic support to slugification
+++Subject: [PATCH 1/8] feat: add Cyrillic support to slugification
++ MIME-Version: 1.0
++ Content-Type: text/plain; charset=UTF-8
++ Content-Transfer-Encoding: 8bit
++diff --git a/patches/0002-protect-yo-nfd.patch b/patches/0002-fix-protect-Cyrillic-from-NFD-decomposition-in-slugi.patch
++similarity index 94%
++rename from patches/0002-protect-yo-nfd.patch
++rename to patches/0002-fix-protect-Cyrillic-from-NFD-decomposition-in-slugi.patch
++index f5a75a15..eb486c9f 100644
++--- a/patches/0002-protect-yo-nfd.patch
+++++ b/patches/0002-fix-protect-Cyrillic-from-NFD-decomposition-in-slugi.patch
++@@ -1,7 +1,7 @@
++-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+++From 8fa7acd0d35626f7c0bbcf3d5766c352f106e6cf Mon Sep 17 00:00:00 2001
++ From: just4honey <j4f@list.ru>
++ Date: Sun, 7 Jun 2026 12:25:42 +0300
++-Subject: [PATCH 2/6] =?UTF-8?q?fix:=20protect=20Cyrillic=20=D0=B9/=D1=91?=
+++Subject: [PATCH 2/8] =?UTF-8?q?fix:=20protect=20Cyrillic=20=D0=B9/=D1=91?=
++  =?UTF-8?q?=20from=20NFD=20decomposition=20in=20slugify?=
++ MIME-Version: 1.0
++ Content-Type: text/plain; charset=UTF-8
++diff --git a/patches/0003-fix-point-weekly-upgrade-at-just4honey-gbrain-fork.patch b/patches/0003-fix-point-weekly-upgrade-at-just4honey-gbrain-fork.patch
++new file mode 100644
++index 00000000..bc5f3af3
++--- /dev/null
+++++ b/patches/0003-fix-point-weekly-upgrade-at-just4honey-gbrain-fork.patch
++@@ -0,0 +1,225 @@
+++From 10fa6e79409a0b3d1107a37385016436482aca3b Mon Sep 17 00:00:00 2001
+++From: just4honey <j4f@list.ru>
+++Date: Sun, 7 Jun 2026 12:32:04 +0300
+++Subject: [PATCH 3/8] fix: point weekly upgrade at just4honey/gbrain fork
+++MIME-Version: 1.0
+++Content-Type: text/plain; charset=UTF-8
+++Content-Transfer-Encoding: 8bit
+++
+++- Rename origin→upstream (garrytan/gbrain), fork→origin (just4honey/gbrain)
+++- Upgrade script now fetches both: merges upstream changes when possible,
+++  pulls from fork otherwise
+++- Local Cyrillic-slug patches are preserved during upgrades
+++---
+++ gbrain-weekly-upgrade.sh | 141 ++++++++++++++++++---------------------
+++ 1 file changed, 64 insertions(+), 77 deletions(-)
+++
+++diff --git a/gbrain-weekly-upgrade.sh b/gbrain-weekly-upgrade.sh
+++index 1d7e5e0a..17e69ace 100755
+++--- a/gbrain-weekly-upgrade.sh
++++++ b/gbrain-weekly-upgrade.sh
+++@@ -6,11 +6,12 @@ set -euo pipefail
+++ GBRAIN_DIR="$HOME/apps/tools/gbrain"
+++ ENV_FILE="$HOME/.gbrain/env"
+++ LOG_FILE="/tmp/gbrain-weekly-upgrade.log"
++++FORK_REMOTE="origin"      # just4honey/gbrain (наш форк с патчами)
++++UPSTREAM_REMOTE="upstream" # garrytan/gbrain (оригинал)
+++ 
+++ exec > "$LOG_FILE" 2>&1
+++ 
+++-echo "=== GBrain Weekly Upgrade: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+++-echo ""
++++echo "=== GBrain Weekly Upgrade: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ===\n"
+++ 
+++ # ---- 1. Load env ----
+++ source "$ENV_FILE"
+++@@ -20,8 +21,7 @@ cd "$GBRAIN_DIR"
+++ PRE_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+++ PRE_COMMIT=$(git rev-parse HEAD)
+++ echo "Current version: $PRE_VERSION"
+++-echo "Current commit:  $PRE_COMMIT"
+++-echo ""
++++echo "Current commit:  $PRE_COMMIT\n"
+++ 
+++ # Stash any local changes so they don't block pull
+++ if [ -n "$(git status --porcelain)" ]; then
+++@@ -34,36 +34,57 @@ fi
+++ 
+++ # ---- 3. Check for update ----
+++ echo "=== Checking for updates ==="
+++-git fetch origin 2>&1 || { echo "❌ git fetch failed"; exit 1; }
++++echo "Fork remote: $FORK_REMOTE (just4honey/gbrain — наши патчи)"
++++echo "Upstream:    $UPSTREAM_REMOTE (garrytan/gbrain — оригинал)"
++++
++++git fetch "$UPSTREAM_REMOTE" 2>&1 || echo "⚠️  upstream fetch failed (non-fatal)"
++++git fetch "$FORK_REMOTE" 2>&1 || { echo "❌ fork fetch failed"; exit 1; }
+++ 
+++ LOCAL=$(git rev-parse HEAD)
+++-REMOTE=$(git rev-parse @{upstream} 2>/dev/null || echo "")
++++FORK_REMOTE_HASH=$(git rev-parse "$FORK_REMOTE/master" 2>/dev/null || echo "")
++++UPSTREAM_HASH=$(git rev-parse "$UPSTREAM_REMOTE/master" 2>/dev/null || echo "")
++++
++++UPGRADE_NEEDED=false
++++
++++# Проверяем upstream (garrytan/gbrain) — есть ли новые коммиты
++++if [ -n "$UPSTREAM_HASH" ] && [ "$UPSTREAM_HASH" != "$LOCAL" ]; then
++++  if git merge-base --is-ancestor "$LOCAL" "$UPSTREAM_HASH" 2>/dev/null; then
++++    echo "⬆️  Upstream has new commits: $LOCAL → $UPSTREAM_HASH"
++++    echo "Merging upstream changes (fast-forward)..."
++++    if git merge --ff-only "$UPSTREAM_REMOTE/master" 2>&1; then
++++      echo "✅ Upstream merge succeeded"
++++      UPGRADE_NEEDED=true
++++    else
++++      echo "⚠️  Diverged — upstream has changes that conflict with our fork."
++++      echo "   Skipping upstream this week; local patches preserved."
++++    fi
++++  fi
++++fi
+++ 
+++-if [ "$LOCAL" = "$REMOTE" ] || [ -z "$REMOTE" ]; then
+++-  echo "Already up-to-date ($PRE_VERSION @ $PRE_COMMIT)."
+++-  echo ""
+++-  echo "=== Running health check (no update needed) ==="
+++-else
+++-  echo "Update available: $LOCAL -> $REMOTE"
+++-  echo ""
+++-  echo "=== Running upgrade ==="
+++-  
+++-  # Pull (uses upstream tracking: origin/master)
+++-  if git pull --ff-only 2>&1; then
+++-    echo "✅ git pull succeeded"
++++# Проверяем форк (just4honey/gbrain) — есть ли новые коммиты
++++NEW_LOCAL=$(git rev-parse HEAD)
++++if [ -n "$FORK_REMOTE_HASH" ] && [ "$FORK_REMOTE_HASH" != "$NEW_LOCAL" ]; then
++++  echo "⬆️  Fork has new commits, pulling..."
++++  if git pull --ff-only "$FORK_REMOTE" master 2>&1; then
++++    echo "✅ Fork pull succeeded"
++++    UPGRADE_NEEDED=true
+++   else
+++-    echo "❌ git pull failed"
+++-    # Rollback
+++-    echo "=== Rolling back ==="
++++    echo "❌ Fork pull failed, rolling back..."
+++     git reset --hard "$PRE_COMMIT"
+++-    if [ "$STASHED" = true ]; then
+++-      git stash pop || true
+++-    fi
+++     exit 1
+++   fi
+++-  
+++-  # Install deps
+++-  echo "Running bun install..."
++++fi
++++
++++# ---- 4. Install & migrate (если были обновления) ----
++++if [ "$UPGRADE_NEEDED" = false ]; then
++++  echo "Already up-to-date ($PRE_VERSION @ $PRE_COMMIT).\n"
++++  echo "=== Running health check (no update needed) ==="
++++else
++++  NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
++++  NEW_COMMIT=$(git rev-parse HEAD)
++++  echo "\nUpgraded: $PRE_VERSION ($PRE_COMMIT) → $NEW_VERSION ($NEW_COMMIT)\n"
++++
++++  echo "=== Running bun install ==="
+++   if bun install 2>&1; then
+++     echo "✅ bun install succeeded"
+++   else
+++@@ -74,68 +95,35 @@ else
+++     fi
+++     exit 1
+++   fi
+++-  
+++-  NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+++-  NEW_COMMIT=$(git rev-parse HEAD)
+++-  echo ""
+++-  echo "Upgraded: $PRE_VERSION ($PRE_COMMIT) → $NEW_VERSION ($NEW_COMMIT)"
+++-  
+++-  # Run DB migrations
+++-  echo ""
+++-  echo "=== Running DB migrations ==="
++++
++++  echo "\n=== Running DB migrations ==="
+++   if gbrain apply-migrations --yes 2>&1; then
+++     echo "✅ Migrations applied"
+++   else
+++-    echo "⚠️  apply-migrations failed, trying gbrain upgrade..."
+++-    if gbrain upgrade 2>&1; then
+++-      echo "✅ gbrain upgrade completed"
+++-      NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+++-      echo "Final version: $NEW_VERSION"
+++-    else
+++-      echo "❌ gbrain upgrade also failed, rolling back..."
+++-      git reset --hard "$PRE_COMMIT"
+++-      bun install 2>&1
+++-      if [ "$STASHED" = true ]; then
+++-        git stash pop || true
+++-      fi
+++-      exit 1
++++    echo "⚠️  apply-migrations failed"
++++    git reset --hard "$PRE_COMMIT"
++++    if [ "$STASHED" = true ]; then
++++      git stash pop || true
+++     fi
++++    exit 1
+++   fi
+++ fi
+++ 
+++-# ---- 4. Health check ----
+++-echo ""
+++-echo "=== Health check (gbrain doctor) ==="
+++-# Run doctor, capture all warnings/errors
++++# ---- 5. Health check ----
++++echo "\n=== Health check (gbrain doctor) ==="
+++ DOCTOR_OUTPUT=$(gbrain doctor 2>&1) || true
+++ echo "$DOCTOR_OUTPUT"
+++ 
+++-# Count failures
+++ FAIL_COUNT=$(echo "$DOCTOR_OUTPUT" | grep -c "\[FAIL\]" || true)
+++ WARN_COUNT=$(echo "$DOCTOR_OUTPUT" | grep -c "\[WARN\]" || true)
+++-echo ""
+++-echo "Health summary: $FAIL_COUNT FAIL, $WARN_COUNT WARN"
+++-
+++-# ---- 5. Verify sync still works ----
+++-echo ""
+++-echo "=== Sync verification ==="
+++-SYNC_OUTPUT=$(gbrain sync --skip-failed --no-pull --repo "$HOME/apps/Obsidian/myVault" --no-embed 2>&1) || true
+++-echo "$SYNC_OUTPUT" | tail -10
++++echo "\nHealth summary: $FAIL_COUNT FAIL, $WARN_COUNT WARN"
+++ 
+++-if echo "$SYNC_OUTPUT" | grep -qi "error\|fail"; then
+++-  echo "⚠️  Sync reported issues (non-critical)"
+++-fi
+++-
+++-# ---- 6. Status summary ----
+++-echo ""
+++-echo "=== Final status ==="
++++# ---- 6. Final status ----
++++echo "\n=== Final status ==="
+++ FINAL_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+++ FINAL_COMMIT=$(git rev-parse HEAD)
+++ 
+++-gbrain status 2>&1
+++-
+++-echo ""
+++-echo "=== Summary ==="
++++echo "\n=== Summary ==="
+++ echo "  Version: $PRE_VERSION → $FINAL_VERSION"
+++ if [ "$PRE_COMMIT" != "$FINAL_COMMIT" ]; then
+++   echo "  Commit:  $PRE_COMMIT → $FINAL_COMMIT"
+++@@ -146,10 +134,9 @@ else
+++ fi
+++ echo "  Health:  $FAIL_COUNT failures, $WARN_COUNT warnings"
+++ 
+++-# Restore stash if not rolled back
+++-if [ "$STASHED" = true ] && [ "$PRE_COMMIT" != "$FINAL_COMMIT" ] && [ "$(git rev-parse HEAD)" != "$PRE_COMMIT" ]; then
++++# Restore stash if update happened successfully
++++if [ "$STASHED" = true ] && [ "$PRE_COMMIT" != "$FINAL_COMMIT" ]; then
+++   git stash pop || true
+++ fi
+++ 
+++-echo ""
+++-echo "=== Done: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
++++echo "\n=== Done: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+++-- 
+++2.43.0
+++
++diff --git a/patches/0004-patch-rewrite-upgrade-script-with-patch-based-releas.patch b/patches/0004-patch-rewrite-upgrade-script-with-patch-based-releas.patch
++new file mode 100644
++index 00000000..91962b58
++--- /dev/null
+++++ b/patches/0004-patch-rewrite-upgrade-script-with-patch-based-releas.patch
++@@ -0,0 +1,296 @@
+++From 5a665c437a96bd5a32c63721dac43b76c8509693 Mon Sep 17 00:00:00 2001
+++From: just4honey <j4f@list.ru>
+++Date: Sun, 7 Jun 2026 15:46:40 +0300
+++Subject: [PATCH 5/8] patch: rewrite upgrade script with patch-based release
+++ workflow
+++
+++- New approach: checkout clean upstream/master, apply patches/000*.patch,
+++  copy fork-specific files, commit as release branch, merge into master
+++- Added push to just4honey/gbrain after successful upgrade
+++- Improved error handling: each patch fails independently
+++- Clear patch report in summary (N applied, M skipped)
+++---
+++ gbrain-weekly-upgrade.sh | 193 +++++++++++++++++++++++++++------------
+++ 1 file changed, 134 insertions(+), 59 deletions(-)
+++
+++diff --git a/gbrain-weekly-upgrade.sh b/gbrain-weekly-upgrade.sh
+++index 17e69ace..f497596a 100755
+++--- a/gbrain-weekly-upgrade.sh
++++++ b/gbrain-weekly-upgrade.sh
+++@@ -1,17 +1,30 @@
+++ #!/usr/bin/env bash
+++ # GBrain weekly upgrade & health check
+++ # Runs every Sunday at 0300 UTC
++++#
++++# Strategy:
++++#   1. Checkout clean upstream/master
++++#   2. Apply patches/0001-cyrillic-slug.patch (Cyrillic in slugs)
++++#      Apply patches/0002-protect-yo-nfd.patch (protect й/ё from NFD)
++++#      Apply patches/0004-propose-takes-deepseek.patch (DeepSeek prompt)
++++#   3. Copy our own files (upgrade script + patches/) that don't exist in upstream
++++#   4. Commit as a release branch
++++#   5. Fast-forward master to release branch
++++#   6. Build, migrate, health check
++++#   7. Push to just4honey/gbrain
+++ set -euo pipefail
+++ 
+++ GBRAIN_DIR="$HOME/apps/tools/gbrain"
+++ ENV_FILE="$HOME/.gbrain/env"
+++ LOG_FILE="/tmp/gbrain-weekly-upgrade.log"
+++-FORK_REMOTE="origin"      # just4honey/gbrain (наш форк с патчами)
+++-UPSTREAM_REMOTE="upstream" # garrytan/gbrain (оригинал)
++++FORK_REMOTE="origin"          # just4honey/gbrain
++++UPSTREAM_REMOTE="upstream"    # garrytan/gbrain
++++PATCHES_DIR="patches"
+++ 
+++ exec > "$LOG_FILE" 2>&1
+++ 
+++-echo "=== GBrain Weekly Upgrade: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ===\n"
++++echo "=== GBrain Weekly Upgrade: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ===
++++"
+++ 
+++ # ---- 1. Load env ----
+++ source "$ENV_FILE"
+++@@ -21,9 +34,10 @@ cd "$GBRAIN_DIR"
+++ PRE_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+++ PRE_COMMIT=$(git rev-parse HEAD)
+++ echo "Current version: $PRE_VERSION"
+++-echo "Current commit:  $PRE_COMMIT\n"
++++echo "Current commit:  $(git rev-parse --short "$PRE_COMMIT")
++++"
+++ 
+++-# Stash any local changes so they don't block pull
++++# Stash any local changes so they don't block
+++ if [ -n "$(git status --porcelain)" ]; then
+++   echo "⚠️  Local changes detected, stashing..."
+++   git stash push -m "gbrain-weekly-auto-stash $(date -u '+%Y-%m-%d')"
+++@@ -32,111 +46,172 @@ else
+++   STASHED=false
+++ fi
+++ 
+++-# ---- 3. Check for update ----
+++-echo "=== Checking for updates ==="
+++-echo "Fork remote: $FORK_REMOTE (just4honey/gbrain — наши патчи)"
+++-echo "Upstream:    $UPSTREAM_REMOTE (garrytan/gbrain — оригинал)"
+++-
++++# ---- 3. Fetch remotes ----
++++echo "=== Fetching remotes ==="
+++ git fetch "$UPSTREAM_REMOTE" 2>&1 || echo "⚠️  upstream fetch failed (non-fatal)"
+++ git fetch "$FORK_REMOTE" 2>&1 || { echo "❌ fork fetch failed"; exit 1; }
+++ 
+++ LOCAL=$(git rev-parse HEAD)
+++-FORK_REMOTE_HASH=$(git rev-parse "$FORK_REMOTE/master" 2>/dev/null || echo "")
+++ UPSTREAM_HASH=$(git rev-parse "$UPSTREAM_REMOTE/master" 2>/dev/null || echo "")
++++UPSTREAM_SHORT=$(git rev-parse --short "$UPSTREAM_HASH" 2>/dev/null || echo "none")
+++ 
++++PATCH_OK=0
++++PATCH_FAIL=0
+++ UPGRADE_NEEDED=false
+++ 
+++-# Проверяем upstream (garrytan/gbrain) — есть ли новые коммиты
++++# ---- 4. Build release from upstream + patches ----
++++# We always build from upstream/master so our patches apply cleanly.
++++# If upstream hasn't changed, we skip (already up-to-date).
+++ if [ -n "$UPSTREAM_HASH" ] && [ "$UPSTREAM_HASH" != "$LOCAL" ]; then
+++-  if git merge-base --is-ancestor "$LOCAL" "$UPSTREAM_HASH" 2>/dev/null; then
+++-    echo "⬆️  Upstream has new commits: $LOCAL → $UPSTREAM_HASH"
+++-    echo "Merging upstream changes (fast-forward)..."
+++-    if git merge --ff-only "$UPSTREAM_REMOTE/master" 2>&1; then
+++-      echo "✅ Upstream merge succeeded"
++++  if ! git merge-base --is-ancestor "$LOCAL" "$UPSTREAM_HASH" 2>/dev/null; then
++++    echo "⚠️  Upstream has diverged from our fork. Skipping."
++++  else
++++    echo "⬆️  Upstream has new commits $(git rev-parse --short "$LOCAL")..$UPSTREAM_SHORT"
++++    echo "=== Building release branch ==="
++++
++++    RELEASE_BRANCH="release-$(date -u '+%Y%m%d')"
++++    git branch -D "$RELEASE_BRANCH" 2>/dev/null || true
++++    git checkout -b "$RELEASE_BRANCH" "$UPSTREAM_HASH"
++++
++++    # --- Step A: Apply patches to upstream files ---
++++    for pf in "$PATCHES_DIR"/0001-*.patch "$PATCHES_DIR"/0002-*.patch "$PATCHES_DIR"/0004-*.patch; do
++++      [ -f "$pf" ] || continue
++++      pname=$(basename "$pf")
++++      echo "  Applying $pname..."
++++      if git am "$pf" 2>/dev/null; then
++++        echo "    ✅ $pname applied"
++++        PATCH_OK=$((PATCH_OK + 1))
++++      else
++++        git am --abort 2>/dev/null || true
++++        echo "    ⚠️  $pname FAILED — upstream changed these files, skipping"
++++        PATCH_FAIL=$((PATCH_FAIL + 1))
++++      fi
++++    done
++++
++++    # --- Step B: Copy our own files (not in upstream) ---
++++    # These are files that exist in our fork but not in garrytan/gbrain
++++    # Currently: gbrain-weekly-upgrade.sh and patches/ directory
++++    OUR_FILES_COPIED=0
++++    if [ -f "$GBRAIN_DIR/gbrain-weekly-upgrade.sh" ]; then
++++      echo "  Copying gbrain-weekly-upgrade.sh..."
++++      cp "$GBRAIN_DIR/gbrain-weekly-upgrade.sh" /tmp/gbrain-weekly-upgrade-for-release.sh
++++      OUR_FILES_COPIED=$((OUR_FILES_COPIED + 1))
++++    fi
++++
++++    # --- Step C: Commit our files ---
++++    if [ "$OUR_FILES_COPIED" -gt 0 ]; then
++++      cp /tmp/gbrain-weekly-upgrade-for-release.sh "$GBRAIN_DIR/gbrain-weekly-upgrade.sh"
++++      mkdir -p "$PATCHES_DIR"
++++      git add "$PATCHES_DIR" gbrain-weekly-upgrade.sh
++++      git commit -m "chore: add fork-specific files (upgrade script + patches)" 2>/dev/null || true
++++    fi
++++
++++    # --- Step D: Merge into master ---
++++    git checkout master
++++    if git merge --ff-only "$RELEASE_BRANCH" 2>&1; then
++++      echo "✅ Merged (fast-forward)"
+++       UPGRADE_NEEDED=true
+++     else
+++-      echo "⚠️  Diverged — upstream has changes that conflict with our fork."
+++-      echo "   Skipping upstream this week; local patches preserved."
++++      echo "⚠️  Fast-forward failed — doing 3-way merge"
++++      if git merge "$RELEASE_BRANCH" --no-edit 2>&1; then
++++        echo "✅ Merged (3-way)"
++++        UPGRADE_NEEDED=true
++++      else
++++        echo "❌ Merge failed — rolling back"
++++        git reset --hard "$PRE_COMMIT"
++++        exit 1
++++      fi
+++     fi
++++
++++    git branch -D "$RELEASE_BRANCH" 2>/dev/null || true
+++   fi
++++else
++++  echo "Upstream at same commit ($UPSTREAM_SHORT) — no new changes."
+++ fi
+++ 
+++-# Проверяем форк (just4honey/gbrain) — есть ли новые коммиты
++++# ---- 5. Sync with fork remote (just4honey/gbrain) ----
+++ NEW_LOCAL=$(git rev-parse HEAD)
+++-if [ -n "$FORK_REMOTE_HASH" ] && [ "$FORK_REMOTE_HASH" != "$NEW_LOCAL" ]; then
++++FORK_HASH=$(git rev-parse "$FORK_REMOTE/master" 2>/dev/null || echo "")
++++if [ -n "$FORK_HASH" ] && [ "$FORK_HASH" != "$NEW_LOCAL" ]; then
+++   echo "⬆️  Fork has new commits, pulling..."
+++   if git pull --ff-only "$FORK_REMOTE" master 2>&1; then
+++     echo "✅ Fork pull succeeded"
+++     UPGRADE_NEEDED=true
+++   else
+++-    echo "❌ Fork pull failed, rolling back..."
+++-    git reset --hard "$PRE_COMMIT"
+++-    exit 1
++++    echo "ℹ️  Our branch is ahead of fork — that's fine"
+++   fi
+++ fi
+++ 
+++-# ---- 4. Install & migrate (если были обновления) ----
++++# ---- 6. Install & build (if updated) ----
+++ if [ "$UPGRADE_NEEDED" = false ]; then
+++-  echo "Already up-to-date ($PRE_VERSION @ $PRE_COMMIT).\n"
+++-  echo "=== Running health check (no update needed) ==="
++++  echo "Already up-to-date ($PRE_VERSION @ $(git rev-parse --short HEAD)).
++++"
+++ else
+++   NEW_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+++   NEW_COMMIT=$(git rev-parse HEAD)
+++-  echo "\nUpgraded: $PRE_VERSION ($PRE_COMMIT) → $NEW_VERSION ($NEW_COMMIT)\n"
++++  echo "Upgraded: $PRE_VERSION → $NEW_VERSION ($(git rev-parse --short HEAD))
++++"
+++ 
+++   echo "=== Running bun install ==="
+++-  if bun install 2>&1; then
+++-    echo "✅ bun install succeeded"
+++-  else
+++-    echo "❌ bun install failed, rolling back..."
+++-    git reset --hard "$PRE_COMMIT"
+++-    if [ "$STASHED" = true ]; then
+++-      git stash pop || true
+++-    fi
+++-    exit 1
+++-  fi
++++  bun install 2>&1 || { echo "❌ bun install failed"; git reset --hard "$PRE_COMMIT"; exit 1; }
++++  echo "✅ bun install done"
++++
++++  echo "
++++=== Running build ==="
++++  bun run build 2>&1 || { echo "❌ Build failed"; git reset --hard "$PRE_COMMIT"; exit 1; }
++++  echo "✅ Build done"
++++
++++  echo "
++++=== Running DB migrations ==="
++++  gbrain apply-migrations --yes 2>&1 || { echo "⚠️  apply-migrations failed"; git reset --hard "$PRE_COMMIT"; exit 1; }
++++  echo "✅ Migrations done"
++++fi
+++ 
+++-  echo "\n=== Running DB migrations ==="
+++-  if gbrain apply-migrations --yes 2>&1; then
+++-    echo "✅ Migrations applied"
++++# ---- 7. Push to our fork ----
++++PUSH_OK=false
++++FORK_REMOTE_URL=$(git remote get-url "$FORK_REMOTE" 2>/dev/null || echo "")
++++if echo "$FORK_REMOTE_URL" | grep -q "just4honey/gbrain"; then
++++  echo "
++++=== Pushing to just4honey/gbrain ==="
++++  if git push "$FORK_REMOTE" master 2>&1; then
++++    echo "✅ Push succeeded"
++++    PUSH_OK=true
+++   else
+++-    echo "⚠️  apply-migrations failed"
+++-    git reset --hard "$PRE_COMMIT"
+++-    if [ "$STASHED" = true ]; then
+++-      git stash pop || true
+++-    fi
+++-    exit 1
++++    echo "⚠️  Push failed (non-fatal — retries next week)"
+++   fi
+++ fi
+++ 
+++-# ---- 5. Health check ----
+++-echo "\n=== Health check (gbrain doctor) ==="
++++# ---- 8. Health check ----
++++echo "
++++=== Health check (gbrain doctor) ==="
+++ DOCTOR_OUTPUT=$(gbrain doctor 2>&1) || true
+++ echo "$DOCTOR_OUTPUT"
+++ 
+++ FAIL_COUNT=$(echo "$DOCTOR_OUTPUT" | grep -c "\[FAIL\]" || true)
+++ WARN_COUNT=$(echo "$DOCTOR_OUTPUT" | grep -c "\[WARN\]" || true)
+++-echo "\nHealth summary: $FAIL_COUNT FAIL, $WARN_COUNT WARN"
++++echo "
++++Health: $FAIL_COUNT FAIL, $WARN_COUNT WARN"
+++ 
+++-# ---- 6. Final status ----
+++-echo "\n=== Final status ==="
++++# ---- 9. Summary ----
++++echo "
++++=== Summary ==="
+++ FINAL_VERSION=$(gbrain version 2>/dev/null || echo "unknown")
+++ FINAL_COMMIT=$(git rev-parse HEAD)
+++-
+++-echo "\n=== Summary ==="
+++ echo "  Version: $PRE_VERSION → $FINAL_VERSION"
++++echo "  Commit:  $(git rev-parse --short "$PRE_COMMIT") → $(git rev-parse --short "$FINAL_COMMIT")"
+++ if [ "$PRE_COMMIT" != "$FINAL_COMMIT" ]; then
+++-  echo "  Commit:  $PRE_COMMIT → $FINAL_COMMIT"
+++   echo "  Result:  UPDATED ✅"
+++ else
+++-  echo "  Commit:  $PRE_COMMIT (unchanged)"
+++   echo "  Result:  UP-TO-DATE ✅"
+++ fi
+++-echo "  Health:  $FAIL_COUNT failures, $WARN_COUNT warnings"
++++echo "  Health:  $FAIL_COUNT FAIL, $WARN_COUNT WARN"
++++echo "  Patches: $PATCH_OK applied, $PATCH_FAIL skipped"
++++[ "$PUSH_OK" = true ] && echo "  Pushed:  ✅" || echo "  Pushed:  —"
+++ 
+++-# Restore stash if update happened successfully
++++# Restore stash if needed
+++ if [ "$STASHED" = true ] && [ "$PRE_COMMIT" != "$FINAL_COMMIT" ]; then
+++   git stash pop || true
+++ fi
+++ 
+++-echo "\n=== Done: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
++++echo "
++++=== Done: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+++-- 
+++2.43.0
+++
++diff --git a/patches/0004-propose-takes-deepseek.patch b/patches/0004-propose-takes-deepseek.patch
++deleted file mode 100644
++index 3af6118b..00000000
++--- a/patches/0004-propose-takes-deepseek.patch
+++++ /dev/null
++@@ -1,196 +0,0 @@
++-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++-From: just4honey <j4f@list.ru>
++-Date: Sun, 7 Jun 2026 15:22:21 +0300
++-Subject: [PATCH 4/6] patch: adapt propose-takes prompt for DeepSeek V4 Flash
++-
++-- New PROMPT_VERSION: v0.36.1.0-deepseek-v4-flash (invalidates cache)
++-- Rewrote EXTRACT_TAKES_PROMPT: structured instructions, explicit weight rules,
++-  simplified language for DeepSeek compatibility
++-- Fixed kind enum in ProposedTake: 'fact'|'take'|'bet'|'hunch' -> 'prediction'|'judgment'|'bet'
++-- Changed modelId fallback: claude-sonnet-4-6 -> deepseek-chat
++-- Added patches/0004-propose-takes-deepseek.patch for upgrade workflow
++----
++- patches/0004-propose-takes-deepseek.patch | 85 +++++++++++++++++++++++
++- src/core/cycle/propose-takes.ts           | 65 +++++++++--------
++- 2 files changed, 122 insertions(+), 28 deletions(-)
++- create mode 100644 patches/0004-propose-takes-deepseek.patch
++-
++-diff --git a/patches/0004-propose-takes-deepseek.patch b/patches/0004-propose-takes-deepseek.patch
++-new file mode 100644
++-index 00000000..d5f1e907
++---- /dev/null
++-+++ b/patches/0004-propose-takes-deepseek.patch
++-@@ -0,0 +1,85 @@
++-+diff --git a/src/core/cycle/propose-takes.ts b/src/core/cycle/propose-takes.ts
++-+index 33fbe054..5282ae0d 100644
++-+--- a/src/core/cycle/propose-takes.ts
++-++++ b/src/core/cycle/propose-takes.ts
++-+@@ -53,7 +53,7 @@ import type { PhaseStatus, CyclePhase } from '../cycle.ts';
++-+  * verdicts in `take_proposals` (composite key includes prompt_version) stay
++-+  * valid as audit history; new runs re-spend LLM tokens on every page.
++-+  */
++-+-export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
++-++export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-deepseek-v4-flash';
++-+ 
++-+ /**
++-+  * Tuned extractor prompt, validated against the hand-labeled synthetic
++-+@@ -83,35 +83,44 @@ export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
++-+  * fixtures before bumping PROPOSE_TAKES_PROMPT_VERSION; the train-holdout
++-+  * gap should stay < 0.10 (overfitting threshold).
++-+  */
++-+-export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the prose below.
++-+-
++-+-A "gradeable claim" is a prediction, recommendation, or interpretive judgment
++-+-that could turn out wrong over time. Examples:
++-+-- "X company will hit ARR milestone by Q3" (prediction)
++-+-- "Y founder is going to struggle with execution" (judgment)
++-+-- "Z market will compress in 18 months" (prediction)
++-+-- "I bet alice wins the round" (bet)
++-+-
++-+-NOT gradeable (do NOT extract these):
++-+-- Pure facts ("X was founded in 2020")
++-+-- Direct quotes from others without endorsement
++-+-- Restatements of an earlier claim in the same page
++-+-
++-+-For each gradeable claim, output a JSON object with:
++-+-- claim_text   (string, <=200 chars, paraphrase or near-verbatim from prose)
++-+-- kind         ('prediction' | 'judgment' | 'bet')
++-+-- holder       ('world' | 'people/<slug>' | 'companies/<slug>' | 'brain' — default 'brain' when author asserts the claim)
++-+-- weight       (number 0..1 inferred from hedging language: 'I bet'/'strong conviction'=0.7-0.85,
++-+-                'I think'/'moderate conviction'=0.5-0.7, 'maybe'/'I'd guess'=0.3-0.5)
++-+-- domain       (short tag — e.g. 'tactics', 'macro', 'hiring', 'geography', 'pricing')
++-+-
++-+-Output ONLY a JSON array of these objects. No prose. No commentary. If no
++-+-gradeable claims, return [].
++-+-
++-+-EXISTING FENCE ROWS (already captured — do NOT propose duplicates):
++-++export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the text below.
++-++
++-++A gradeable claim is a prediction, judgment, or bet — a statement that can be
++-++proven right or wrong over time. Extract ONLY claims with clear future outcomes
++-++or evaluative positions.
++-++
++-++EXAMPLES of gradeable claims:
++-++- "The company will reach $10M ARR by Q4 2025" (prediction)
++-++- "This founder lacks execution skills" (judgment)
++-++- "I bet they win the contract" (bet)
++-++- "The market will consolidate within 2 years" (prediction)
++-++
++-++DO NOT extract:
++-++- Plain facts ("Founded in 2020", "Has 50 employees")
++-++- Direct quotes without the author endorsing them
++-++- Repeated claims from earlier in the same page
++-++- Vague statements with no clear outcome or evaluative position
++-++
++-++For each gradeable claim, output a JSON object with these exact fields:
++-++  "claim_text": string, max 200 chars, paraphrase or near-verbatim
++-++  "kind": one of "prediction" | "judgment" | "bet"
++-++  "holder": "world" | "people/<slug>" | "companies/<slug>" | "brain" (default: "brain")
++-++  "weight": number 0.0 to 1.0
++-++  "domain": short category tag (e.g. "tactics", "macro", "hiring", "pricing", "product")
++-++
++-++Weight rules — use hedging language to infer confidence:
++-++  "I am sure", "definitely", "guaranteed", "certainly" → 0.8–1.0
++-++  "I think", "probably", "likely", "I believe" → 0.5–0.7
++-++  "Maybe", "possibly", "I wonder", "not sure" → 0.2–0.4
++-++  No hedging language at all → 0.5
++-++
++-++IMPORTANT: Output ONLY a JSON array. No introduction, no commentary, no markdown.
++-++If no gradeable claims are found, return [].
++-++
++-++EXISTING CLAIMS (already captured — skip these to avoid duplicates):
++-+ {EXISTING_TAKES_JSON}
++-+ 
++-+-PAGE PROSE:
++-++PAGE TEXT:
++-+ {PAGE_BODY}
++-+ `;
++-+ 
++-diff --git a/src/core/cycle/propose-takes.ts b/src/core/cycle/propose-takes.ts
++-index 33fbe054..5282ae0d 100644
++---- a/src/core/cycle/propose-takes.ts
++-+++ b/src/core/cycle/propose-takes.ts
++-@@ -53,7 +53,7 @@ import type { PhaseStatus, CyclePhase } from '../cycle.ts';
++-  * verdicts in `take_proposals` (composite key includes prompt_version) stay
++-  * valid as audit history; new runs re-spend LLM tokens on every page.
++-  */
++--export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
++-+export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-deepseek-v4-flash';
++- 
++- /**
++-  * Tuned extractor prompt, validated against the hand-labeled synthetic
++-@@ -83,35 +83,44 @@ export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
++-  * fixtures before bumping PROPOSE_TAKES_PROMPT_VERSION; the train-holdout
++-  * gap should stay < 0.10 (overfitting threshold).
++-  */
++--export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the prose below.
++--
++--A "gradeable claim" is a prediction, recommendation, or interpretive judgment
++--that could turn out wrong over time. Examples:
++--- "X company will hit ARR milestone by Q3" (prediction)
++--- "Y founder is going to struggle with execution" (judgment)
++--- "Z market will compress in 18 months" (prediction)
++--- "I bet alice wins the round" (bet)
++--
++--NOT gradeable (do NOT extract these):
++--- Pure facts ("X was founded in 2020")
++--- Direct quotes from others without endorsement
++--- Restatements of an earlier claim in the same page
++--
++--For each gradeable claim, output a JSON object with:
++--- claim_text   (string, <=200 chars, paraphrase or near-verbatim from prose)
++--- kind         ('prediction' | 'judgment' | 'bet')
++--- holder       ('world' | 'people/<slug>' | 'companies/<slug>' | 'brain' — default 'brain' when author asserts the claim)
++--- weight       (number 0..1 inferred from hedging language: 'I bet'/'strong conviction'=0.7-0.85,
++--                'I think'/'moderate conviction'=0.5-0.7, 'maybe'/'I'd guess'=0.3-0.5)
++--- domain       (short tag — e.g. 'tactics', 'macro', 'hiring', 'geography', 'pricing')
++--
++--Output ONLY a JSON array of these objects. No prose. No commentary. If no
++--gradeable claims, return [].
++--
++--EXISTING FENCE ROWS (already captured — do NOT propose duplicates):
++-+export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the text below.
++-+
++-+A gradeable claim is a prediction, judgment, or bet — a statement that can be
++-+proven right or wrong over time. Extract ONLY claims with clear future outcomes
++-+or evaluative positions.
++-+
++-+EXAMPLES of gradeable claims:
++-+- "The company will reach $10M ARR by Q4 2025" (prediction)
++-+- "This founder lacks execution skills" (judgment)
++-+- "I bet they win the contract" (bet)
++-+- "The market will consolidate within 2 years" (prediction)
++-+
++-+DO NOT extract:
++-+- Plain facts ("Founded in 2020", "Has 50 employees")
++-+- Direct quotes without the author endorsing them
++-+- Repeated claims from earlier in the same page
++-+- Vague statements with no clear outcome or evaluative position
++-+
++-+For each gradeable claim, output a JSON object with these exact fields:
++-+  "claim_text": string, max 200 chars, paraphrase or near-verbatim
++-+  "kind": one of "prediction" | "judgment" | "bet"
++-+  "holder": "world" | "people/<slug>" | "companies/<slug>" | "brain" (default: "brain")
++-+  "weight": number 0.0 to 1.0
++-+  "domain": short category tag (e.g. "tactics", "macro", "hiring", "pricing", "product")
++-+
++-+Weight rules — use hedging language to infer confidence:
++-+  "I am sure", "definitely", "guaranteed", "certainly" → 0.8–1.0
++-+  "I think", "probably", "likely", "I believe" → 0.5–0.7
++-+  "Maybe", "possibly", "I wonder", "not sure" → 0.2–0.4
++-+  No hedging language at all → 0.5
++-+
++-+IMPORTANT: Output ONLY a JSON array. No introduction, no commentary, no markdown.
++-+If no gradeable claims are found, return [].
++-+
++-+EXISTING CLAIMS (already captured — skip these to avoid duplicates):
++- {EXISTING_TAKES_JSON}
++- 
++--PAGE PROSE:
++-+PAGE TEXT:
++- {PAGE_BODY}
++- `;
++- 
++--- 
++-2.43.0
++-
++diff --git a/patches/0006-deepseek-pricing.patch b/patches/0005-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch
++similarity index 87%
++rename from patches/0006-deepseek-pricing.patch
++rename to patches/0005-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch
++index bf2f5cf4..ec043690 100644
++--- a/patches/0006-deepseek-pricing.patch
+++++ b/patches/0005-patch-add-pricing-for-deepseek-v4-flash-and-deepseek.patch
++@@ -1,7 +1,7 @@
++-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+++From 41fc626a373236a908ebd476673dee2e4fd0ff92 Mon Sep 17 00:00:00 2001
++ From: just4honey <j4f@list.ru>
++ Date: Sun, 7 Jun 2026 15:58:28 +0300
++-Subject: [PATCH 6/6] patch: add pricing for deepseek-v4-flash and
+++Subject: [PATCH 6/8] patch: add pricing for deepseek-v4-flash and
++  deepseek-v4-pro
++ 
++ ---
++-- 
++2.43.0
++
+diff --git a/patches/0010-feat-make-propose_takes-page_limit-configurable-via-.patch b/patches/0010-feat-make-propose_takes-page_limit-configurable-via-.patch
+new file mode 100644
+index 00000000..6a6e6eee
+--- /dev/null
++++ b/patches/0010-feat-make-propose_takes-page_limit-configurable-via-.patch
+@@ -0,0 +1,29 @@
++From 111723abcf99ab5eb923673d2704cb522cb1c87f Mon Sep 17 00:00:00 2001
++From: just4honey <j4f@list.ru>
++Date: Sun, 7 Jun 2026 18:28:41 +0300
++Subject: [PATCH 10/10] feat: make propose_takes page_limit configurable via
++ dream.propose_takes.page_limit
++
++Usage: gbrain config set dream.propose_takes.page_limit 505
++Default: 100 (backward compatible)
++---
++ src/core/cycle/propose-takes.ts | 3 ++-
++ 1 file changed, 2 insertions(+), 1 deletion(-)
++
++diff --git a/src/core/cycle/propose-takes.ts b/src/core/cycle/propose-takes.ts
++index f361eb61..06cf0414 100644
++--- a/src/core/cycle/propose-takes.ts
+++++ b/src/core/cycle/propose-takes.ts
++@@ -305,7 +305,8 @@ class ProposeTakesPhase extends BaseCyclePhase {
++   ): Promise<{ summary: string; details: Record<string, unknown>; status?: PhaseStatus }> {
++     const extractor = opts.extractor ?? defaultExtractor;
++     const promptVersion = opts.promptVersion ?? PROPOSE_TAKES_PROMPT_VERSION;
++-    const pageLimit = opts.pageLimit ?? 100;
+++    const cfgPageLimit = await engine.getConfig('dream.propose_takes.page_limit');
+++    const pageLimit = Number(cfgPageLimit) || opts.pageLimit || 100;
++     const skipPagesWithFence = opts.skipPagesWithFence ?? false;
++     const proposalRunId = `propose-${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')}-${randomUUID().slice(0, 8)}`;
++ 
++-- 
++2.43.0
++
+-- 
+2.43.0
+

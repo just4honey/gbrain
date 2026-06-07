@@ -1,7 +1,7 @@
 From 0b9bfa1b0080f9eabb49ecc1a093810e06b8808f Mon Sep 17 00:00:00 2001
 From: just4honey <j4f@list.ru>
 Date: Sun, 7 Jun 2026 17:45:13 +0300
-Subject: [PATCH 08/10] fix: revert propose-takes prompt to working generic
+Subject: [PATCH 08/12] fix: revert propose-takes prompt to working generic
  version
 
 DeepSeek-optimized prompt from 347b2a12 caused 300s timeouts.

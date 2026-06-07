@@ -1,7 +1,7 @@
 From 5a23bfca52d02bfd440ac77a8beab1211a63378a Mon Sep 17 00:00:00 2001
 From: just4honey <j4f@list.ru>
 Date: Sun, 7 Jun 2026 17:45:46 +0300
-Subject: [PATCH 09/10] chore: update patches to current working set
+Subject: [PATCH 09/12] chore: update patches to current working set
 
 - Remove propose-takes prompt patches (reverted to upstream)
 - Remove chore-update-patches patch (self-referential)

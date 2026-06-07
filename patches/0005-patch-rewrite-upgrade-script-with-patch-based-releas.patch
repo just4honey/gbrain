@@ -1,7 +1,7 @@
 From 5a665c437a96bd5a32c63721dac43b76c8509693 Mon Sep 17 00:00:00 2001
 From: just4honey <j4f@list.ru>
 Date: Sun, 7 Jun 2026 15:46:40 +0300
-Subject: [PATCH 05/10] patch: rewrite upgrade script with patch-based release
+Subject: [PATCH 05/12] patch: rewrite upgrade script with patch-based release
  workflow
 
 - New approach: checkout clean upstream/master, apply patches/000*.patch,

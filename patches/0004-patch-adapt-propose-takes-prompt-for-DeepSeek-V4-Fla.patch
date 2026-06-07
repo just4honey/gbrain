@@ -1,7 +1,7 @@
 From 347b2a12d10f15d113e244fc679ed6976115c5a2 Mon Sep 17 00:00:00 2001
 From: just4honey <j4f@list.ru>
 Date: Sun, 7 Jun 2026 15:22:21 +0300
-Subject: [PATCH 04/10] patch: adapt propose-takes prompt for DeepSeek V4 Flash
+Subject: [PATCH 04/12] patch: adapt propose-takes prompt for DeepSeek V4 Flash
 
 - New PROMPT_VERSION: v0.36.1.0-deepseek-v4-flash (invalidates cache)
 - Rewrote EXTRACT_TAKES_PROMPT: structured instructions, explicit weight rules,
