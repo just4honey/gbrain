@@ -18,6 +18,15 @@
 
 export const CJK_SLUG_CHARS = '一-鿿぀-ゟ゠-ヿ가-힯';
 
+/**
+ * Characters preserved during slugification. Extends CJK with Cyrillic
+ * (Basic Cyrillic U+0400–U+04FF covers Russian, Ukrainian, Bulgarian, etc.)
+ * so files with Cyrillic names produce non-empty slugs.
+ *
+ * v0.42.15.0+ (just4honey fork) — Cyrillic range added.
+ */
+export const SLUGIFY_KEEP_CHARS = CJK_SLUG_CHARS + '\u0400-\u04FF';
+
 export const CJK_RANGES_REGEX = new RegExp(`[${CJK_SLUG_CHARS}]`);
 
 export const CJK_SENTENCE_DELIMITERS = ['。', '！', '？']; // 。！？

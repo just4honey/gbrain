@@ -11,7 +11,7 @@
  *   pathToSlug()  →  convert file paths to page slugs
  */
 
-import { CJK_SLUG_CHARS } from './cjk.ts';
+import { CJK_SLUG_CHARS, SLUGIFY_KEEP_CHARS } from './cjk.ts';
 // v0.37.7.0 #1169 submodule-detection helpers. Bottom-of-file already
 // aliases existsSync as `_existsSync` for other purposes; the top-of-file
 // import keeps the pruneDir helper's deps near its callsite.
@@ -379,7 +379,7 @@ export function unsyncableReason(path: string, opts: SyncableOptions = {}): Sync
  * Pattern is the inner character class only (no anchors); callers wrap it
  * in `^...$` or compose it with prefixes like `(?:people|companies)/...`.
  */
-export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${CJK_SLUG_CHARS}]+`);
+export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${SLUGIFY_KEEP_CHARS}]+`);
 
 /**
  * Slugify a single path segment: lowercase, strip special chars, spaces → hyphens.
@@ -387,7 +387,7 @@ export const SLUG_SEGMENT_PATTERN = new RegExp(`[a-z0-9._\\-${CJK_SLUG_CHARS}]+`
  * NFC re-normalize after the NFD-strip-accents pass so Hangul Jamo recomposes back
  * into precomposed syllables that fall inside the whitelist.
  */
-const SLUGIFY_KEEP_RE = new RegExp(`[^a-z0-9.\\s_\\-${CJK_SLUG_CHARS}]`, 'g');
+const SLUGIFY_KEEP_RE = new RegExp(`[^a-z0-9.\\s_\\-${SLUGIFY_KEEP_CHARS}]`, 'g');
 
 export function slugifySegment(segment: string): string {
   return segment
