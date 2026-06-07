@@ -53,7 +53,7 @@ import type { PhaseStatus, CyclePhase } from '../cycle.ts';
  * verdicts in `take_proposals` (composite key includes prompt_version) stay
  * valid as audit history; new runs re-spend LLM tokens on every page.
  */
-export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-deepseek-v4-flash';
+export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-tuned-cat15';
 
 /**
  * Tuned extractor prompt, validated against the hand-labeled synthetic
@@ -76,51 +76,42 @@ export const PROPOSE_TAKES_PROMPT_VERSION = 'v0.36.1.0-deepseek-v4-flash';
  *     (pure facts, direct quotes, restatements).
  *   - conviction inference rules anchored to specific hedging language
  *     ("I bet"/"strong conviction"=0.7-0.85, "I think"/"moderate"=0.5-0.7).
- *   - kind enum kept narrow ('prediction'|'judgment'|'bet') — the v1
+ *   - kind enum kept narrow ('prediction'|'judgment'|'bet') — the v0.36.1
  *     stub's 4-tag enum bled into noise classification.
  *
  * Replaces the v0.36.1.0-stub. If you re-tune, run cat15 against the
  * fixtures before bumping PROPOSE_TAKES_PROMPT_VERSION; the train-holdout
  * gap should stay < 0.10 (overfitting threshold).
  */
-export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the text below.
+export const EXTRACT_TAKES_PROMPT = `Extract gradeable claims from the prose below.
 
-A gradeable claim is a prediction, judgment, or bet — a statement that can be
-proven right or wrong over time. Extract ONLY claims with clear future outcomes
-or evaluative positions.
+A "gradeable claim" is a prediction, recommendation, or interpretive judgment
+that could turn out wrong over time. Examples:
+- "X company will hit ARR milestone by Q3" (prediction)
+- "Y founder is going to struggle with execution" (judgment)
+- "Z market will compress in 18 months" (prediction)
+- "I bet alice wins the round" (bet)
 
-EXAMPLES of gradeable claims:
-- "The company will reach $10M ARR by Q4 2025" (prediction)
-- "This founder lacks execution skills" (judgment)
-- "I bet they win the contract" (bet)
-- "The market will consolidate within 2 years" (prediction)
+NOT gradeable (do NOT extract these):
+- Pure facts ("X was founded in 2020")
+- Direct quotes from others without endorsement
+- Restatements of an earlier claim in the same page
 
-DO NOT extract:
-- Plain facts ("Founded in 2020", "Has 50 employees")
-- Direct quotes without the author endorsing them
-- Repeated claims from earlier in the same page
-- Vague statements with no clear outcome or evaluative position
+For each gradeable claim, output a JSON object with:
+- claim_text   (string, <=200 chars, paraphrase or near-verbatim from prose)
+- kind         ('prediction' | 'judgment' | 'bet')
+- holder       ('world' | 'people/<slug>' | 'companies/<slug>' | 'brain' — default 'brain' when author asserts the claim)
+- weight       (number 0..1 inferred from hedging language: 'I bet'/'strong conviction'=0.7-0.85,
+                'I think'/'moderate conviction'=0.5-0.7, 'maybe'/'I'd guess'=0.3-0.5)
+- domain       (short tag — e.g. 'tactics', 'macro', 'hiring', 'geography', 'pricing')
 
-For each gradeable claim, output a JSON object with these exact fields:
-  "claim_text": string, max 200 chars, paraphrase or near-verbatim
-  "kind": one of "prediction" | "judgment" | "bet"
-  "holder": "world" | "people/<slug>" | "companies/<slug>" | "brain" (default: "brain")
-  "weight": number 0.0 to 1.0
-  "domain": short category tag (e.g. "tactics", "macro", "hiring", "pricing", "product")
+Output ONLY a JSON array of these objects. No prose. No commentary. If no
+gradeable claims, return [].
 
-Weight rules — use hedging language to infer confidence:
-  "I am sure", "definitely", "guaranteed", "certainly" → 0.8–1.0
-  "I think", "probably", "likely", "I believe" → 0.5–0.7
-  "Maybe", "possibly", "I wonder", "not sure" → 0.2–0.4
-  No hedging language at all → 0.5
-
-IMPORTANT: Output ONLY a JSON array. No introduction, no commentary, no markdown.
-If no gradeable claims are found, return [].
-
-EXISTING CLAIMS (already captured — skip these to avoid duplicates):
+EXISTING FENCE ROWS (already captured — do NOT propose duplicates):
 {EXISTING_TAKES_JSON}
 
-PAGE TEXT:
+PAGE PROSE:
 {PAGE_BODY}
 `;
 
